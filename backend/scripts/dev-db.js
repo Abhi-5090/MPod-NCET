@@ -53,7 +53,27 @@ function findMongod() {
   }
 }
 
+// The backend's database (backend/.env.development.local wins over backend/.env).
+function configuredUri() {
+  const dotenv = require("dotenv");
+  const read = (f) => {
+    try {
+      return dotenv.parse(fs.readFileSync(path.resolve(__dirname, "..", f))).MONGODB_URI;
+    } catch (_) {
+      return undefined;
+    }
+  };
+  return process.env.MONGODB_URI || read(".env.development.local") || read(".env") || "";
+}
+
 async function main() {
+  // Nothing to start when the backend uses a remote database (e.g. MongoDB Atlas).
+  const target = configuredUri();
+  if (target && !new RegExp(`(127\\.0\\.0\\.1|localhost):${PORT}`).test(target)) {
+    console.log("[db] The backend uses a remote database (MONGODB_URI in backend/.env); no local database started.");
+    setInterval(() => {}, 1 << 30); // stay up so `npm run dev` keeps the other processes running
+    return;
+  }
   const existing = await tryConnect();
   if (existing) {
     await ensureReplicaSet(existing);
