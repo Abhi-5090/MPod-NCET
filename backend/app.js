@@ -13,6 +13,13 @@ async function main() {
     } catch (err) {
       if (attempt >= 12) throw err;
       console.log(`Waiting for the database (${err.message.split("\n")[0]})...`);
+      // The local development database is started separately; say how, once.
+      if (attempt === 1 && /127\.0\.0\.1:27018|localhost:27018/.test(env.mongoUri)) {
+        console.log(
+          "  The local development database isn't running. Start everything with `npm run dev` in the mPod folder,\n" +
+            "  or start just the database in another terminal with `npm run db` (in backend/)."
+        );
+      }
       await new Promise((r) => setTimeout(r, 2500));
     }
   }
