@@ -4,11 +4,11 @@ import { toast } from "react-toastify";
 import { connect } from "react-redux";
 import { Link } from "react-router-dom";
 import axios from "axios";
-import * as XLSX from "xlsx";
 import { setBreadcrumbItems } from "../../store/actions";
 import { apiUrl, getErrorMessage } from "../../config/api";
 import { isPlatformRole } from "../../config/roles";
 import { useAuth } from "../../context/AuthContext";
+import { TemplateButton, downloadExcelTemplate } from "../../components/Common/TemplateDownload";
 
 const breadcrumbItems = [
   { title: "Mpod", link: "#" },
@@ -29,18 +29,32 @@ const SAMPLE_COLUMNS = [
   "password",
 ];
 
-const SAMPLE_ROW = {
-  first_name: "Ravi Kumar",
-  roll_no: "21A91A0501",
-  mobile: "9876543210",
-  email: "ravi.kumar@example.com",
-  gender: "male",
-  college: "Example College of Engineering",
-  branch: "CSE",
-  passout_year: 2025,
-  role: "student",
-  password: "ChangeMe123",
-};
+const SAMPLE_ROWS = [
+  {
+    first_name: "Ravi Kumar",
+    roll_no: "21A91A0501",
+    mobile: "9876543210",
+    email: "ravi.kumar@example.com",
+    gender: "male",
+    college: "Example College of Engineering",
+    branch: "CSE",
+    passout_year: 2025,
+    role: "student",
+    password: "ChangeMe123",
+  },
+  {
+    first_name: "Priya Sharma",
+    roll_no: "21A91A0502",
+    mobile: "9876543211",
+    email: "priya.sharma@example.com",
+    gender: "female",
+    college: "Example College of Engineering",
+    branch: "CSE",
+    passout_year: 2025,
+    role: "student",
+    password: "ChangeMe123",
+  },
+];
 
 const isExcelFile = (file) => /\.(xlsx|xls)$/i.test(file.name);
 
@@ -83,10 +97,7 @@ const AddUser = (props) => {
   };
 
   const downloadSample = () => {
-    const sheet = XLSX.utils.json_to_sheet([SAMPLE_ROW], { header: SAMPLE_COLUMNS });
-    const book = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(book, sheet, "Users");
-    XLSX.writeFile(book, "users_sample.xlsx");
+    downloadExcelTemplate({ fileName: "users_template.xlsx", sheetName: "Users", rows: SAMPLE_ROWS });
   };
 
   const effectiveTenantId = isPlatform ? tenantId : user.t_id;
@@ -135,9 +146,7 @@ const AddUser = (props) => {
             <CardBody>
               <div className="d-flex justify-content-between align-items-center mb-3">
                 <h4 className="card-title mb-0">Add Users (Excel upload)</h4>
-                <Button color="secondary" outline size="sm" type="button" onClick={downloadSample}>
-                  Download sample
-                </Button>
+                <TemplateButton onClick={downloadSample} />
               </div>
 
               {isPlatform && (

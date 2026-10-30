@@ -22,7 +22,9 @@ const addTopic = async (req, res) => {
   const rows = xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: "A" });
   const names = rows
     .map((row) => String(Object.values(row)[0] ?? "").trim().slice(0, 300))
-    .filter(Boolean);
+    .filter(Boolean)
+    // the template's heading row is not a topic
+    .filter((name, i) => !(i === 0 && /^(topic|topics|topic[ _]?name)$/i.test(name)));
   if (!names.length) return res.status(400).json({ message: "No topics found in the file." });
   if (names.length > 2000) return res.status(400).json({ message: "A file can have at most 2000 topics." });
   const saved = await Topic.insertMany(

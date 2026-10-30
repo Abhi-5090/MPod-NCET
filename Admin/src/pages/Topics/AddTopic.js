@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom"
 import axios from "axios"
 import { setBreadcrumbItems } from "../../store/actions"
 import { apiUrl, getErrorMessage } from "../../config/api"
+import { TemplateButton, downloadExcelTemplate } from "../../components/Common/TemplateDownload"
 
 const AddTopic = props => {
   document.title = "Add Topic | Mpod"
@@ -100,6 +101,13 @@ const AddTopic = props => {
     }
   }
 
+  const downloadTemplate = () =>
+    downloadExcelTemplate({
+      fileName: "topics_template.xlsx",
+      sheetName: "Topics",
+      rows: [{ topic_name: "Inheritance" }, { topic_name: "Polymorphism" }, { topic_name: "Exception handling" }],
+    })
+
   return (
     <React.Fragment>
       <Row>
@@ -139,14 +147,20 @@ const AddTopic = props => {
                 <Row>
                   <Col md="6">
                     <div className="mb-3">
-                      <label className="form-label">Upload topics</label>
-                      <br />
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                        <label className="form-label mb-0">Upload topics</label>
+                        <TemplateButton onClick={downloadTemplate} />
+                      </div>
                       <input
                         type="file"
+                        accept=".xlsx,.xls,.csv"
                         className="form-control form-control-file"
                         data-buttonname="btn-secondary"
                         onChange={e => setFile(e.target.files[0] || null)}
                       />
+                      <small className="form-text text-muted d-block">
+                        One topic per row in the first column (the heading row is ignored).
+                      </small>
                     </div>
                   </Col>
                 </Row>

@@ -11,6 +11,7 @@ import { toast } from "react-toastify"
 import { setBreadcrumbItems } from "../../store/actions"
 import { apiUrl, IMAGE_BASE, getErrorMessage } from "../../config/api"
 import LoadState from "../../components/Common/LoadState"
+import { TemplateButton, downloadSampleIcon } from "../../components/Common/TemplateDownload"
 
 const switchLabelStyle = {
   display: "flex",
@@ -173,8 +174,13 @@ const EditModule = props => {
                   <Row>
                     <Col md="6">
                       <div className="mb-3">
-                        <label className="form-label">Module icon</label>
-                        <br />
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <label className="form-label mb-0">Module icon</label>
+                          <TemplateButton
+                            label="Download sample icon"
+                            onClick={() => downloadSampleIcon("module_icon_sample.png", (data.module_name || "").trim() || "Module")}
+                          />
+                        </div>
                         {previewUrl && <img src={previewUrl} alt="Module Icon" width="50px" />}
                         {!previewUrl && data.module_icon && (
                           <img src={IMAGE_BASE + "module-icons/" + data.module_icon} alt="Module Icon" width="50px" />
@@ -186,6 +192,7 @@ const EditModule = props => {
                           data-buttonname="btn-secondary"
                           onChange={handleFileChange}
                         />
+                        <small className="form-text text-muted d-block">PNG or JPG, square (e.g. 256x256).</small>
                       </div>
                     </Col>
                   </Row>

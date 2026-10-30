@@ -9,6 +9,7 @@ import axios from "axios"
 import { toast } from "react-toastify"
 import { setBreadcrumbItems } from "../../store/actions"
 import { apiUrl, getErrorMessage } from "../../config/api"
+import { TemplateButton, downloadSampleIcon } from "../../components/Common/TemplateDownload"
 
 const AddModule = props => {
   document.title = "Add Module | Mpod"
@@ -123,8 +124,13 @@ const AddModule = props => {
                 <Row>
                   <Col md="6">
                     <div className="mb-3">
-                      <label className="form-label">Module icon</label>
-                      <br />
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                        <label className="form-label mb-0">Module icon</label>
+                        <TemplateButton
+                          label="Download sample icon"
+                          onClick={() => downloadSampleIcon("module_icon_sample.png", moduleName.trim() || "Module")}
+                        />
+                      </div>
                       {previewUrl && <img src={previewUrl} alt="Module Icon" width="50px" />}
                       <input
                         type="file"
@@ -133,6 +139,7 @@ const AddModule = props => {
                         data-buttonname="btn-secondary"
                         onChange={handleFileChange}
                       />
+                      <small className="form-text text-muted d-block">PNG or JPG, square (e.g. 256x256).</small>
                     </div>
                   </Col>
                 </Row>

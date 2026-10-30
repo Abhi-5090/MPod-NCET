@@ -8,6 +8,7 @@ import { setBreadcrumbItems } from "../../store/actions"
 import axios from "axios"
 import { useNavigate } from "react-router-dom"
 import { apiUrl, getErrorMessage } from "../../config/api"
+import { TemplateButton, downloadExcelTemplate } from "../../components/Common/TemplateDownload"
 
 const breadcrumbItems = [
   { title: "Mpod", link: "#" },
@@ -100,6 +101,26 @@ const AddInterviewQuestion = props => {
     setFile(event.target.files[0] || null)
   }
 
+  const downloadTemplate = () =>
+    downloadExcelTemplate({
+      fileName: "interview_questions_template.xlsx",
+      sheetName: "Questions",
+      rows: [
+        {
+          question: "What is the difference between == and equals() in Java?",
+          answer:
+            "== compares object references (or primitive values); equals() compares logical content and can be overridden, e.g. String.equals compares characters.",
+          star_status: 1,
+        },
+        {
+          question: "What is the difference between ArrayList and LinkedList?",
+          answer:
+            "ArrayList is backed by a resizable array with fast random access; LinkedList is a doubly linked list with fast inserts/removals at the ends but slow index access.",
+          star_status: 0,
+        },
+      ],
+    })
+
   return (
     <React.Fragment>
       <Row>
@@ -140,8 +161,19 @@ const AddInterviewQuestion = props => {
                 <Row>
                   <Col md="6">
                     <FormGroup>
-                      <Label>Upload questions File</Label>
-                      <input type="file" className="form-control" onChange={handleFileChange} />
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                        <Label className="mb-0">Upload questions File</Label>
+                        <TemplateButton onClick={downloadTemplate} />
+                      </div>
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        className="form-control"
+                        onChange={handleFileChange}
+                      />
+                      <small className="form-text text-muted d-block">
+                        Columns: question, answer, star_status (1 = asked by a company before, optional).
+                      </small>
                     </FormGroup>
                   </Col>
                 </Row>

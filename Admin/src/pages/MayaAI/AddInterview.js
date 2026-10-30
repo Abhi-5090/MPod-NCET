@@ -19,7 +19,7 @@ import { setBreadcrumbItems } from "../../store/actions";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import * as XLSX from "xlsx";
+import { TemplateButton, downloadExcelTemplate } from "../../components/Common/TemplateDownload";
 import { apiUrl, getErrorMessage } from "../../config/api";
 import useTenantSelection, { TenantSelect } from "./useTenantSelection";
 import { isActiveOption, questionCountError } from "./interviewHelpers";
@@ -267,15 +267,11 @@ const AddInterview = (props) => {
     }
   };
   const handleSampleDownload = () => {
-    const sampleData = [
-      { roll_no: "" }
-    ];
-
-    const worksheet = XLSX.utils.json_to_sheet(sampleData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Sample Data");
-
-    XLSX.writeFile(workbook, "sample_data.xlsx");
+    downloadExcelTemplate({
+      fileName: "bulk_technology_interviews_template.xlsx",
+      sheetName: "Students",
+      rows: [{ roll_no: "21A91A0501" }, { roll_no: "21A91A0502" }],
+    });
   };
   return (
     <React.Fragment>
@@ -329,9 +325,10 @@ const AddInterview = (props) => {
                           accept=".csv,.xlsx"
                           required
                         />
-                        <Button color="secondary" onClick={handleSampleDownload}>
-                          Download Sample
-                        </Button>
+                        <small className="form-text text-muted d-block">
+                          One roll number per row in the roll_no column.
+                        </small>
+                        <TemplateButton className="mt-2" onClick={handleSampleDownload} />
                       </div>
                     </Col>
                   ) : null}

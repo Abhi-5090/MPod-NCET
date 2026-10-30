@@ -35,7 +35,11 @@ const addCompanyQuestion = asyncHandler(async (req, res) => {
     throw badRequest("Could not read the file.");
   }
   const rows = xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: "A" });
-  const questions = rows.map((row) => String(Object.values(row)[0] ?? "").trim().slice(0, 2000)).filter(Boolean);
+  const questions = rows
+    .map((row) => String(Object.values(row)[0] ?? "").trim().slice(0, 2000))
+    .filter(Boolean)
+    // the template's heading row is not a question
+    .filter((q, i) => !(i === 0 && /^questions?$/i.test(q)));
   if (!questions.length) throw badRequest("No questions found in the file.");
   if (questions.length > 5000) throw badRequest("A file can have at most 5000 questions.");
   const saved = await CompanyQuestion.insertMany(questions.map((question) => ({ ...base, question })));

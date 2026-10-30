@@ -14,6 +14,7 @@ import { setBreadcrumbItems } from "../../store/actions";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { apiUrl, getErrorMessage } from "../../config/api";
+import { TemplateButton, downloadExcelTemplate } from "../../components/Common/TemplateDownload";
 
 const AddCompanyQuestion = (props) => {
   document.title = "Add Company Question | Mpod";
@@ -127,6 +128,17 @@ const AddCompanyQuestion = (props) => {
     }
   };
 
+  const downloadTemplate = () =>
+    downloadExcelTemplate({
+      fileName: "company_questions_template.xlsx",
+      sheetName: "Questions",
+      rows: [
+        { question: "Tell me about yourself." },
+        { question: "Explain the difference between an abstract class and an interface." },
+        { question: "Why do you want to join our company?" },
+      ],
+    });
+
   return (
     <React.Fragment>
       <Row>
@@ -188,12 +200,20 @@ const AddCompanyQuestion = (props) => {
                   />
                 </Col>
                 <Col md="6">
-                  <Label>Upload Questions</Label>
+                  <div className="d-flex justify-content-between align-items-center mb-2">
+                    <Label className="mb-0">Upload Questions</Label>
+                    <TemplateButton onClick={downloadTemplate} />
+                  </div>
                   <input
                     type="file"
+                    accept=".xlsx,.xls,.csv"
                     className="form-control"
                     onChange={handleFileChange}
                   />
+                  <small className="form-text text-muted d-block">
+                    One question per row in the first column (the heading row is ignored). Company, type, round,
+                    year and tag are chosen above.
+                  </small>
                 </Col>
               </Row>
 

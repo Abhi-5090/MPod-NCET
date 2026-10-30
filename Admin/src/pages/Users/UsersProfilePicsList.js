@@ -9,6 +9,7 @@ import { setBreadcrumbItems } from "../../store/actions";
 import { apiUrl, IMAGE_BASE, getErrorMessage } from "../../config/api";
 import LoadState from "../../components/Common/LoadState";
 import ConfirmModal from "../../components/Common/ConfirmModal";
+import { TemplateButton, downloadProfilePicsZipTemplate } from "../../components/Common/TemplateDownload";
 import useTenantUsers from "./useTenantUsers";
 import "./datatables.scss";
 import { canManageUserRole } from "../../config/roles";
@@ -186,11 +187,20 @@ const UsersProfilePicsList = (props) => {
                 <Button color="primary" onClick={() => fileInputRef.current && fileInputRef.current.click()} disabled={uploading}>
                   {zipFile ? `ZIP: ${zipFile.name}` : "Choose ZIP File"}
                 </Button>
+                <TemplateButton
+                  label="Download template (.zip)"
+                  onClick={() =>
+                    downloadProfilePicsZipTemplate().catch(() => toast.error("Could not create the template ZIP."))
+                  }
+                />
                 <Button color="success" onClick={handleUploadZip} disabled={!zipFile || uploading}>
                   {uploading && <Spinner size="sm" className="me-1" />}
                   Upload Profile Pics
                 </Button>
               </div>
+              <small className="text-muted w-100 text-md-end">
+                Images named by roll number (e.g. 21A91A0501.png) inside one .zip.
+              </small>
             </CardBody>
             <CardBody>
               <LoadState

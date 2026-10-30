@@ -11,6 +11,7 @@ import { toast } from "react-toastify"
 import { setBreadcrumbItems } from "../../store/actions"
 import { apiUrl, IMAGE_BASE, getErrorMessage } from "../../config/api"
 import LoadState from "../../components/Common/LoadState"
+import { TemplateButton, downloadSampleIcon } from "../../components/Common/TemplateDownload"
 
 const categoryOptions = [
   { label: "Low Code", value: "lowcode" },
@@ -155,13 +156,22 @@ const EditTechnology = props => {
                   <Row>
                     <Col md="6">
                       <FormGroup>
-                        <Label>Upload Technology Icon</Label>
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <Label className="mb-0">Upload Technology Icon</Label>
+                          <TemplateButton
+                            label="Download sample icon"
+                            onClick={() =>
+                              downloadSampleIcon("technology_icon_sample.png", (data.technology_name || "").trim() || "Technology")
+                            }
+                          />
+                        </div>
                         <input
                           type="file"
                           accept="image/*"
                           className="form-control"
                           onChange={e => setTechnologyIcon(e.target.files[0] || null)}
                         />
+                        <small className="form-text text-muted d-block">PNG or JPG, square (e.g. 256x256).</small>
                         {typeof technologyIcon === "string" && (
                           <img
                             src={`${backendImageUrl}${technologyIcon}`}
