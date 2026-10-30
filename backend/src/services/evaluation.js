@@ -218,7 +218,7 @@ Respond with JSON: {"accuracy": <integer 0-100>}`,
   return clampScore(data.accuracy);
 }
 
-const CODE_SYSTEM = `You are an expert evaluator of coding interview answers.
+const CODE_SYSTEM = `You are an expert evaluator of coding interview answers. Respond with JSON only.
 First decide whether the candidate's answer is actual code in a programming language. If it is not code, respond with:
 {"is_code": false, "message": "The provided answer is not code, so evaluation metrics like accuracy and efficiency cannot be calculated."}
 If it is code, evaluate it against the problem description and respond with:

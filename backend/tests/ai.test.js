@@ -336,3 +336,50 @@ describe("limiter", () => {
     expect(order).toEqual(["first", "interactive", "batch"]);
   });
 });
+
+describe("OpenAI request parameters by model family", () => {
+  const { openAiParams, isOpenAiReasoningModel } = require("../src/services/ai/providers/openai");
+  const cfg = { reasoningEffort: "low", reasoningTokens: 2000 };
+
+  test("GPT-5 and later use max_completion_tokens and reasoning effort, never a custom temperature", () => {
+    for (const m of ["gpt-5.5", "gpt-5.4-mini", "gpt-6.1-sol", "o3"]) {
+      expect(isOpenAiReasoningModel(m)).toBe(true);
+      expect(openAiParams(m, 700, 0.2, cfg)).toEqual({ max_completion_tokens: 2700, reasoning_effort: "low" });
+    }
+  });
+
+  test("older chat models keep temperature and max_tokens", () => {
+    for (const m of ["gpt-4o", "gpt-4.1-mini", "gpt-5-chat-latest"]) {
+      expect(openAiParams(m, 700, 0.2, cfg)).toEqual({ temperature: 0.2, max_tokens: 700 });
+    }
+  });
+
+  test("every prompt sent in JSON mode mentions JSON (OpenAI rejects it otherwise)", async () => {
+    const evaluation = require("../src/services/evaluation");
+    const seen = [];
+    ai.providers.openai._setClient({
+      chat: {
+        completions: {
+          create: async (req) => {
+            seen.push(req.messages.map((m) => m.content).join("\n"));
+            return { choices: [{ message: { content: '{"accuracy": 50, "is_code": true, "questions": ["What is a class?","What is an object?"]}' }, finish_reason: "stop" }] };
+          },
+        },
+      },
+    });
+    const saved = { provider: env.ai.provider, fallback: env.ai.fallback };
+    Object.assign(env.ai, { provider: "openai", fallback: "none" });
+    aiStatus._reset();
+    try {
+      await evaluation.generateTechnologyQuestions({ technologyName: "Java", level: "easy", count: 2, moduleTopics: ["OOP"] });
+      await evaluation.scoreVerbalAnswer("q", "a", 1);
+      await evaluation.overallAnalysis([{ given_question: "q", given_answer: "a", accuracy: 50 }]);
+      await evaluation.scoreIdea("problem", "idea");
+      await evaluation.evaluateCodingInterview([{ qid: "q1", problem_name: "p", description: "d" }], { q1: { answer: "code", optimized_answer: "code2" } });
+    } finally {
+      Object.assign(env.ai, saved);
+    }
+    expect(seen.length).toBeGreaterThanOrEqual(6);
+    seen.forEach((text) => expect(text.toLowerCase()).toContain("json"));
+  });
+});

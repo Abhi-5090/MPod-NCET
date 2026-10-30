@@ -93,12 +93,19 @@ const env = {
       timeoutMs: int(process.env.OPENAI_TIMEOUT_MS, 60 * 1000),
       interactiveTimeoutMs: int(process.env.OPENAI_INTERACTIVE_TIMEOUT_MS, 25 * 1000),
       maxConcurrent: int(process.env.OPENAI_MAX_CONCURRENCY, 16),
+      // Defaults chosen after testing this account's models (Oct 2026): the strongest model for
+      // the quality-critical tasks, a fast one where a student is waiting.
+      // gpt-3.5-turbo has been retired by OpenAI; GPT-5-family models need the reasoning
+      // parameters below (handled in providers/openai.js).
       models: {
-        scoring: process.env.OPENAI_SCORING_MODEL || "gpt-4o",
-        generation: process.env.OPENAI_GENERATION_MODEL || "gpt-3.5-turbo",
-        summary: process.env.OPENAI_SUMMARY_MODEL || "gpt-3.5-turbo",
-        coding: process.env.OPENAI_CODING_MODEL || "gpt-4-turbo",
+        scoring: process.env.OPENAI_SCORING_MODEL || "gpt-5.5",
+        generation: process.env.OPENAI_GENERATION_MODEL || "gpt-5.4-mini",
+        summary: process.env.OPENAI_SUMMARY_MODEL || "gpt-5.4",
+        coding: process.env.OPENAI_CODING_MODEL || "gpt-5.5",
       },
+      // Reasoning models: effort (none|minimal|low|medium|high) and extra output tokens for it.
+      reasoningEffort: lower(process.env.OPENAI_REASONING_EFFORT, "low"),
+      reasoningTokens: int(process.env.OPENAI_REASONING_TOKENS, 2000),
     },
     // Self-hosted models on the DGX Spark (see services/ai/providers/dgx.js).
     dgx: {

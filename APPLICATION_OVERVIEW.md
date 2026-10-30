@@ -398,10 +398,11 @@ All content can be read by any staff member (needed for scheduling) and changed 
   - tolerates reasoning text around the JSON and retries invalid JSON once;
   - records provider, model, tokens and time per evaluation (`evaluation_ai`).
 - **Tasks and default models** (OpenAI / DGX Spark):
-  - **scoring:** `gpt-4o` / `gpt-oss:120b` (verbal answer scoring)
-  - **generation:** `gpt-3.5-turbo` / `gpt-oss:20b` (question generation, OpenAI health check)
-  - **summary:** `gpt-3.5-turbo` / `gpt-oss:20b` (overall analysis)
-  - **coding:** `gpt-4-turbo` / `qwen3-coder:30b` (idea check, code review, optimisation comparison)
+  - **scoring:** `gpt-5.5` / `gpt-oss:120b` (verbal answer scoring)
+  - **generation:** `gpt-5.4-mini` / `gpt-oss:20b` (question generation, OpenAI health check)
+  - **summary:** `gpt-5.4` / `gpt-oss:20b` (overall analysis)
+  - **coding:** `gpt-5.5` / `qwen3-coder:30b` (idea check, code review, optimisation comparison)
+  - GPT-5-family models are called with `max_completion_tokens` and `reasoning_effort` (`OPENAI_REASONING_EFFORT`, default low); older models with `temperature` and `max_tokens`.
 
   Models are configurable with `OPENAI_*_MODEL` and `DGX_*_MODEL`. All calls request JSON output.
 - **The DGX provider** reaches the DGX Spark at `DGX_BASE_URL` with `DGX_API_KEY` through the API-key gateway. It speaks Ollama's native API (`num_ctx`, `num_predict`, `keep_alive` and `think` per request) or an OpenAI-compatible API (vLLM, TensorRT-LLM; `reasoning_effort` for gpt-oss, thinking off for Qwen3). Each task can have its own endpoint, key and protocol. Plain HTTP to public addresses is refused in production. The full model list and API contract are in `docs/DGX_MODEL_CONTRACT.md`.

@@ -63,6 +63,21 @@ function makeToAiError(who) {
 }
 
 const OPENAI = { name: "openai", label: "OpenAI", keyVar: "OPENAI_API_KEY" };
+
+// OpenAI reasoning models (o-series, GPT-5 and later) take max_completion_tokens (which
+// also covers their reasoning), accept reasoning_effort, and only the default temperature.
+const isOpenAiReasoningModel = (model) => /^(o\d|gpt-5|gpt-6)/i.test(String(model)) && !/-chat-latest$/i.test(String(model));
+
+/** Request fields for one call to OpenAI itself, by model family. */
+function openAiParams(model, maxTokens, temperature, cfg) {
+  if (isOpenAiReasoningModel(model)) {
+    return {
+      max_completion_tokens: maxTokens + (cfg.reasoningTokens || 0),
+      ...(cfg.reasoningEffort ? { reasoning_effort: cfg.reasoningEffort } : {}),
+    };
+  }
+  return { temperature, max_tokens: maxTokens };
+}
 const toAiError = makeToAiError(OPENAI);
 
 /**
@@ -98,8 +113,10 @@ function create(cfg, opts = {}) {
             { role: "system", content: system },
             { role: "user", content: user },
           ],
-          temperature,
-          max_tokens: maxTokens + (extras.extraTokens || 0),
+          // OpenAI itself: parameters by model family. OpenAI-compatible servers (vLLM etc.): classic.
+          ...(who.name === "openai"
+            ? openAiParams(model, maxTokens, temperature, cfg)
+            : { temperature, max_tokens: maxTokens + (extras.extraTokens || 0) }),
           ...(json ? { response_format: { type: "json_object" } } : {}),
           ...(extras.body || {}),
         },
@@ -125,7 +142,13 @@ function create(cfg, opts = {}) {
       // OpenAI: the cheapest real request (1 output token) verifies the key and model access.
       try {
         await getClient().chat.completions.create(
-          { model: cfg.models.generation || wanted[0], messages: [{ role: "user", content: "ping" }], max_tokens: 1 },
+          {
+            model: cfg.models.generation || wanted[0],
+            messages: [{ role: "user", content: "ping" }],
+            ...(isOpenAiReasoningModel(cfg.models.generation || wanted[0])
+              ? { max_completion_tokens: 16, reasoning_effort: "low" }
+              : { max_tokens: 1 }),
+          },
           { timeout: 15000, maxRetries: 0 }
         );
       } catch (err) {
@@ -170,4 +193,4 @@ function create(cfg, opts = {}) {
   };
 }
 
-module.exports = { create, toAiError, makeToAiError };
+module.exports = { create, toAiError, makeToAiError, isOpenAiReasoningModel, openAiParams };
