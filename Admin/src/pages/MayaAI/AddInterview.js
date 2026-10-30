@@ -22,17 +22,13 @@ import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
 import { apiUrl, getErrorMessage } from "../../config/api";
 import useTenantSelection, { TenantSelect } from "./useTenantSelection";
+import { isActiveOption, questionCountError } from "./interviewHelpers";
 
 const levelOptions = [
   { label: "Easy", value: "easy" },
   { label: "Medium", value: "medium" },
   { label: "Hard", value: "hard" },
   { label: "Any", value: "any" },
-];
-
-const statusOptions = [
-  { label: "Active", value: "1" },
-  { label: "Not Active", value: "0" },
 ];
 
 const platformOptions = [
@@ -60,7 +56,6 @@ const AddInterview = (props) => {
   const [moduleData, setModuleData] = useState([]);
   const [startDate, setStartDate] = useState(null);
   const [rollNo, setRollNo] = useState("");
-  const [selectedStatus, setSelectedStatus] = useState(null);
   const [selectedInterviewType, setSelectedInterviewType] = useState(null);
   const [selectedPlatform, setSelectedPlatform] = useState(null);
   const [file, setFile] = useState(null);
@@ -125,16 +120,16 @@ const AddInterview = (props) => {
     }
   };
 
-  const technologyOptionGroup = technologyData.map((ele) => ({
+  const technologyOptionGroup = technologyData.filter(isActiveOption).map((ele) => ({
     options: [{ label: ele.technology_name, value: ele._id }],
   }));
 
-  const optionModuleGroup = moduleData.map((ele) => ({
+  const optionModuleGroup = moduleData.filter(isActiveOption).map((ele) => ({
     label: ele.module_name,
     value: ele._id,
   }));
 
-  const topicOptionGroup = topicData.map((ele) => ({
+  const topicOptionGroup = topicData.filter(isActiveOption).map((ele) => ({
     options: [{ label: ele.topic_name, value: ele._id }],
   }));
 
@@ -171,10 +166,6 @@ const AddInterview = (props) => {
     setSelectedPlatform(selectedPlatform);
   };
 
-  const handleStatusSelect = (selectedStatus) => {
-    setSelectedStatus(selectedStatus);
-  };
-
   const handleInterviewTypeSelect = (selectedInterviewType) => {
     setSelectedInterviewType(selectedInterviewType);
     // Reset rollNo and file when switching types
@@ -188,16 +179,15 @@ const AddInterview = (props) => {
       !selectedPlatform ||
       !selectedTechnologyGroup ||
       !selectedModuleGroup?.length ||
-      !selectedTopicGroup?.length ||
       !selectedLevel ||
       !data.no_of_questions ||
       !startDate ||
-      !selectedStatus ||
       !selectedInterviewType
     ) {
       return "Please fill all required fields";
     }
-    if (Number(data.no_of_questions) > 10) return "please enter upto 10 questions";
+    const countError = questionCountError(data.no_of_questions, 1, 10);
+    if (countError) return countError;
     if (selectedInterviewType.value === "single" && !rollNo) return "Please enter a Roll No";
     if (selectedInterviewType.value === "bulk" && !file) return "Please upload a file";
     return null;
@@ -215,14 +205,13 @@ const AddInterview = (props) => {
       if (selectedInterviewType.value === "single") {
         const dataList = {
           platform: selectedPlatform.value,
-          roll_no: rollNo.trim().toUpperCase(),
+          roll_no: rollNo.trim(),
           technology: selectedTechnologyGroup.value,
           module: selectedModuleGroup.map((group) => group.value),
-          topic: selectedTopicGroup.map((group) => group.value),
+          topic: (selectedTopicGroup || []).map((group) => group.value),
           start_date_time: startDate,
           level: selectedLevel.value,
           questions_count: data.no_of_questions,
-          status: selectedStatus.value,
           created_by: user.roll_no,
           tenant_id: tenantId,
         };
@@ -235,11 +224,10 @@ const AddInterview = (props) => {
           file,
           technology: selectedTechnologyGroup.value,
           module: selectedModuleGroup.map((group) => group.value),
-          topic: selectedTopicGroup.map((group) => group.value),
+          topic: (selectedTopicGroup || []).map((group) => group.value),
           start_date_time: startDate,
           level: selectedLevel.value,
           questions_count: data.no_of_questions,
-          status: selectedStatus.value,
           created_by: user.roll_no,
           tenant_id: tenantId,
           type: selectedInterviewType.value,
@@ -382,6 +370,7 @@ const AddInterview = (props) => {
                         options={topicOptionGroup}
                         classNamePrefix="select2-selection"
                       />
+                      <small className="text-muted">Leave empty to cover all topics</small>
                     </div>
                   </Col>
                 </Row>
@@ -424,17 +413,6 @@ const AddInterview = (props) => {
                           <DateTimePicker value={startDate} onChange={(d) => setStartDate(d ? d.toISOString() : "")} />
                         </InputGroup>
                       </FormGroup>
-                    </div>
-                  </Col>
-                  <Col md="6">
-                    <div className="mb-3">
-                      <Label>Status</Label>
-                      <Select
-                        value={selectedStatus}
-                        onChange={handleStatusSelect}
-                        options={statusOptions}
-                        classNamePrefix="select2-selection"
-                      />
                     </div>
                   </Col>
                 </Row>

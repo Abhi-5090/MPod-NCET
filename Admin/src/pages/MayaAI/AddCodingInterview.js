@@ -28,10 +28,6 @@ const levelOptions = [
   { label: "Hard", value: "hard" },
   { label: "Any", value: "any" },
 ];
-const statusOptions = [
-  { label: "Active", value: "1" },
-  { label: "not Active", value: "0" },
-];
 const platformOptions = [
   { label: "Web", value: "web" },
   { label: "MPOD", value: "mpod" },
@@ -51,7 +47,6 @@ const AddCodingInterview = (props) => {
   const [selectedLevel, setSelectedLevel] = useState(null);
   const [startDate, setStartDate] = useState(null);
   const [rollNo, setRollNo] = useState("");
-  const [selectedStatus, setSelectedStatus] = useState(null)
   const [selectedInterviewType, setSelectedInterviewType] = useState(null);
   const navigate = useNavigate();
   const [selectedPlatform, setSelectedPlatform] = useState(null);
@@ -88,9 +83,6 @@ const AddCodingInterview = (props) => {
     setSelectedLevel(selectedLevel);
   };
 
-  const handlestatusSelect = (selectedLevel) => {
-    setSelectedStatus(selectedLevel);
-  };
   const handleInterviewTypeSelect = (selectedInterviewType) => {
     setSelectedInterviewType(selectedInterviewType);
     // Reset rollNo and file when switching types
@@ -118,7 +110,6 @@ const AddCodingInterview = (props) => {
     if (!selectedInterviewType) return "Please select interview type.";
     if (!selectedLevel) return "Please select complexity level.";
     if (!startDate) return "Please select start date and time.";
-    if (!selectedStatus) return "Please select interview status.";
     if (selectedInterviewType.value === "single" && !rollNo.trim()) return "Please enter a Roll No";
     if (selectedInterviewType.value === "bulk" && !file) return "Please upload a file";
     return null;
@@ -140,7 +131,6 @@ const AddCodingInterview = (props) => {
           'start_date_time': startDate,
           'level': selectedLevel.value,
           "questions_count": CODING_QUESTIONS_COUNT,
-          "status": selectedStatus.value,
           "created_by": user.roll_no,
           "tenant_id": tenantId
         };
@@ -154,7 +144,6 @@ const AddCodingInterview = (props) => {
           'start_date_time': startDate,
           'level': selectedLevel.value,
           "questions_count": CODING_QUESTIONS_COUNT,
-          "status": selectedStatus.value,
           "created_by": user.roll_no,
           "tenant_id": tenantId,
           "type": selectedInterviewType.value
@@ -275,17 +264,6 @@ const AddCodingInterview = (props) => {
                         <DateTimePicker value={startDate} onChange={(d) => setStartDate(d ? d.toISOString() : "")} />
 
                       </FormGroup>
-                    </div>
-                  </Col>
-                  <Col md="6">
-                    <div className="mb-3">
-                      <Label>Status</Label>
-                      <Select
-                        value={selectedStatus}
-                        onChange={handlestatusSelect}
-                        options={statusOptions}
-                        classNamePrefix="select2-selection"
-                      />
                     </div>
                   </Col>
                 </Row>

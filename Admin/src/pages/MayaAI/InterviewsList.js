@@ -18,9 +18,13 @@ import {
   attemptedPercentage,
   deleteResultMessage,
   getTodayDateString,
-  studentReportUrl, statusColor, canRetryEvaluation } from "./interviewHelpers";
+  studentReportUrl, statusColor, canRetryEvaluation, canDeleteInterview } from "./interviewHelpers";
 
 const joinList = (value) => (Array.isArray(value) ? value.join(", ") : value || "");
+
+// Average accuracy to one decimal place when numeric; other values pass through.
+const formatAccuracy = (value) =>
+  value !== null && value !== undefined && value !== "" && !isNaN(Number(value)) ? Number(value).toFixed(1) : value;
 
 const InterviewsList = (props) => {
   document.title = "Interviews List | Mpod";
@@ -112,9 +116,12 @@ const InterviewsList = (props) => {
     return filtered;
   }, [interviewsData, statusFilter, technologyFilter, searchTerm]);
 
-  const upcomingCount = filteredData.filter((i) => i.interview_status === "Upcoming").length;
-  const attemptedCount = filteredData.filter((i) => i.interview_status === "Attempted").length;
-  const expiredCount = filteredData.filter((i) => i.interview_status === "Expired").length;
+  // counts use all loaded (date-scoped) results, not the search/status/technology filters
+  const upcomingCount = interviewsData.filter((i) => i.interview_status === "Upcoming").length;
+  const attemptedCount = interviewsData.filter((i) => i.interview_status === "Attempted").length;
+  const expiredCount = interviewsData.filter((i) => i.interview_status === "Expired").length;
+
+  const refetch = () => fetchInterviewsData(filterDate || getTodayDateString());
 
   const confirmDeleteInterview = async () => {
     setDeleting(true);
@@ -152,7 +159,7 @@ const InterviewsList = (props) => {
         </Badge>{row && row.provisional && (<Badge color="warning" className="ms-1" title={row.evaluation_error || "Scored without AI"}>Provisional</Badge>)}</>
       ),
     },
-    { dataField: "average_accuracy", text: "Total Accuracy" },
+    { dataField: "average_accuracy", text: "Total Accuracy", formatter: formatAccuracy },
     {
       dataField: "actions",
       text: "Actions",
@@ -173,7 +180,7 @@ const InterviewsList = (props) => {
             View
           </a>
             {interview.provisional && (
-              <RetryEvaluationButton interviewId={interview._id} interviewType="ai generated" label="Re-score with AI" title="Replace the provisional score with the AI evaluation" />
+              <RetryEvaluationButton interviewId={interview._id} interviewType="ai generated" label="Re-score with AI" title="Replace the provisional score with the AI evaluation" onDone={refetch} />
             )}
           </>
         ) : (
@@ -184,11 +191,13 @@ const InterviewsList = (props) => {
               </Link>
             )}
             {canRetryEvaluation(interview.interview_status) && (
-              <RetryEvaluationButton interviewId={interview._id} interviewType="ai generated" title={interview.evaluation_error || ""} />
+              <RetryEvaluationButton interviewId={interview._id} interviewType="ai generated" title={interview.evaluation_error || ""} onDone={refetch} />
             )}
-            <Button color="danger" size="sm" onClick={() => setSelectedInterviewId(interview._id)}>
-              Delete
-            </Button>
+            {canDeleteInterview(interview.interview_status) && (
+              <Button color="danger" size="sm" onClick={() => setSelectedInterviewId(interview._id)}>
+                Delete
+              </Button>
+            )}
           </>
         ),
     },
@@ -207,7 +216,7 @@ const InterviewsList = (props) => {
       Level: item.level,
       "No of Questions": item.questions_count,
       "Start Date & Time": item.start_date_time_ist,
-      Accuracy: item.average_accuracy,
+      Accuracy: formatAccuracy(item.average_accuracy),
       Status: item.interview_status,
     }));
 
@@ -372,7 +381,7 @@ const InterviewsList = (props) => {
                 error={error}
                 empty={!tenantId || !filteredData.length}
                 emptyText={tenantId ? "No interviews found" : "Select a college"}
-                onRetry={() => fetchInterviewsData(filterDate || getTodayDateString())}
+                onRetry={refetch}
               >
                 <BootstrapTable
                   keyField="_id"

@@ -15,7 +15,6 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const validate = data => {
   const errors = {}
   if (!data.organization_name.trim()) errors.organization_name = "Please enter organization name"
-  if (!data.contact_person.trim()) errors.contact_person = "Please enter contact person"
   if (!EMAIL_RE.test(data.email.trim())) errors.email = "Please enter a valid email"
   const duration = Number(data.interview_duration_minutes)
   if (!Number.isInteger(duration) || duration <= 0)

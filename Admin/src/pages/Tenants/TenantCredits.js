@@ -325,6 +325,9 @@ const TenantCredits = props => {
                       {history.items.map(tx => {
                         const badge = TYPE_BADGE[tx.type] || { color: "light", label: tx.type }
                         const amount = Number(tx.amount)
+                        // Consume/refund rows name the student, e.g. "21A91A0501 · technology".
+                        const rollNo = tx.type === "consume" || tx.type === "refund" ? tx.roll_no : null
+                        const txDetail = [rollNo, tx.interview_type].filter(Boolean).join(" · ")
                         return (
                           <tr key={tx._id}>
                             <td className="text-nowrap">{formatDate(tx.createdAt)}</td>
@@ -337,9 +340,9 @@ const TenantCredits = props => {
                             <td className="text-end">{tx.balance_after}</td>
                             <td>
                               {tx.reason || ""}
-                              {tx.interview_type && (
+                              {txDetail && (
                                 <div className="small text-muted">
-                                  {tx.interview_type}
+                                  {txDetail}
                                   {tx.interview_id ? ` · ${tx.interview_id}` : ""}
                                 </div>
                               )}

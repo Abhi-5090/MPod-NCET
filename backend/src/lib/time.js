@@ -19,8 +19,11 @@ function istDayRange(dateStr, offsetDays = 0) {
     nowIst.setUTCDate(nowIst.getUTCDate() + offsetDays);
     [y, m, d] = [nowIst.getUTCFullYear(), nowIst.getUTCMonth() + 1, nowIst.getUTCDate()];
   }
-  const start = new Date(Date.UTC(y, m - 1, d) - IST_OFFSET_MS);
-  if (Number.isNaN(start.getTime())) throw badRequest("Invalid date.");
+  const utc = new Date(Date.UTC(y, m - 1, d));
+  if (Number.isNaN(utc.getTime()) || utc.getUTCFullYear() !== y || utc.getUTCMonth() !== m - 1 || utc.getUTCDate() !== d) {
+    throw badRequest("Invalid date.");
+  }
+  const start = new Date(utc.getTime() - IST_OFFSET_MS);
   const end = new Date(start.getTime() + 24 * 3600 * 1000 - 1);
   return { start, end };
 }

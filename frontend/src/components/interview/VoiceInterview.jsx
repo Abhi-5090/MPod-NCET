@@ -31,11 +31,19 @@ function VoiceInterview({ session, client, onFinish }) {
   // Resume at the first question the student had not moved past.
   const finalIds = new Set((session.answers || []).filter((a) => a.final).map((a) => a.question_id));
   const firstOpen = questions.findIndex((q) => !finalIds.has(q.id));
+  // Autosaved (not final) answers, kept so a resumed answer is continued, not overwritten.
+  const partialsRef = useRef(null);
+  if (!partialsRef.current) {
+    partialsRef.current = Object.fromEntries(
+      (session.answers || []).filter((a) => !a.final && a.answer).map((a) => [a.question_id, String(a.answer)])
+    );
+  }
+  const partialFor = (q) => (q && partialsRef.current[q.id]) || "";
 
   const [index, setIndex] = useState(firstOpen === -1 ? questions.length : firstOpen);
   const [phase, setPhase] = useState("speaking"); // speaking | buffer | answering | saving
   const [seconds, setSeconds] = useState(BUFFER_SECONDS);
-  const [typed, setTyped] = useState("");
+  const [typed, setTyped] = useState(() => partialFor(questions[firstOpen]));
   const [typing, setTyping] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [fatal, setFatal] = useState("");
@@ -45,10 +53,12 @@ function VoiceInterview({ session, client, onFinish }) {
   const canUseVoice = browserSupportsSpeechRecognition && isMicrophoneAvailable !== false;
   const useTyping = typing || !canUseVoice;
   const question = questions[index];
+  const partial = partialFor(question);
+  const spoken = partial && transcript ? `${partial} ${transcript}` : partial || transcript;
 
   // Latest values for timers/callbacks.
   const textRef = useRef("");
-  textRef.current = useTyping ? typed : transcript;
+  textRef.current = useTyping ? typed : spoken;
   const indexRef = useRef(index);
   indexRef.current = index;
   const onFinishRef = useRef(onFinish);
@@ -103,6 +113,9 @@ function VoiceInterview({ session, client, onFinish }) {
       }
       if (status && status < 500 && status !== 429) {
         // e.g. 401: the interview was resumed elsewhere, so this tab's session is no longer valid
+        // Stop here: the deadline must not trigger a submit that would always fail.
+        finishedRef.current = true;
+        clearTimeout(retryTimerRef.current);
         setFatal(
           (err.response.data && err.response.data.message) ||
             "This interview session is no longer valid. Please restart the interview from your dashboard."
@@ -117,7 +130,7 @@ function VoiceInterview({ session, client, onFinish }) {
     }
     if (!mountedRef.current) return;
     resetRef.current();
-    setTyped("");
+    setTyped(partialFor(questions[i + 1]));
     advancingRef.current = false;
     if (finishAfterSaveRef.current || i + 1 >= questions.length) {
       finishAll();
@@ -135,18 +148,19 @@ function VoiceInterview({ session, client, onFinish }) {
   // Overall time limit from the server.
   useEffect(() => {
     if (!session.deadline_at) return undefined;
-    const skew = new Date(session.server_time).getTime() - Date.now();
-    const tick = () => setDeadlineLeft(Math.floor((new Date(session.deadline_at).getTime() - (Date.now() + skew)) / 1000));
+    const offset = Number(session.clock_offset) || 0; // measured once when the session started
+    const tick = () => setDeadlineLeft(Math.floor((new Date(session.deadline_at).getTime() - (Date.now() + offset)) / 1000));
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  }, [session.deadline_at, session.server_time]);
+  }, [session.deadline_at, session.clock_offset]);
 
   // Server time is up: save what we have, then submit.
   useEffect(() => {
     if (deadlineLeft === null || deadlineLeft > 0 || finishedRef.current) return;
-    if (advancingRef.current) {
-      finishAfterSaveRef.current = true; // submit after the in-flight save completes
+    if (advancingRef.current || phase === "saving") {
+      // submit after the in-flight save (or its pending retry) completes
+      finishAfterSaveRef.current = true;
     } else if (phase === "answering") {
       finishAfterSaveRef.current = true;
       advance();
@@ -246,7 +260,7 @@ function VoiceInterview({ session, client, onFinish }) {
 
   const switchToTyping = () => {
     stopListening();
-    setTyped(transcript);
+    setTyped(spoken);
     setTyping(true);
   };
 
@@ -295,7 +309,7 @@ function VoiceInterview({ session, client, onFinish }) {
                 />
               ) : (
                 <div className="mpod-answer-box" aria-live="polite">
-                  <p>{transcript || "Your answer will appear here as you speak..."}</p>
+                  <p>{spoken || "Your answer will appear here as you speak..."}</p>
                 </div>
               )}
               {!canUseVoice && (

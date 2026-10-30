@@ -14,7 +14,10 @@ import { apiUrl, getErrorMessage } from "../../config/api";
 import useTenantSelection, { TenantSelect } from "./useTenantSelection";
 import LoadState from "../../components/Common/LoadState";
 import ConfirmModal from "../../components/Common/ConfirmModal";
-import { deleteResultMessage, studentReportUrl, statusColor, canRetryEvaluation } from "./interviewHelpers";
+import {
+  deleteResultMessage,
+  getTodayDateString,
+  studentReportUrl, statusColor, canRetryEvaluation, canDeleteInterview } from "./interviewHelpers";
 import "./datatables.scss";
 
 const CodingInterviewsList = (props) => {
@@ -24,7 +27,7 @@ const CodingInterviewsList = (props) => {
   const { tenantId, tenantName } = tenantSelection;
   const [interviewsData, setInterviewsData] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterDate, setFilterDate] = useState(""); // Holds selected date
+  const [filterDate, setFilterDate] = useState(getTodayDateString()); // YYYY-MM-DD (IST day)
   const [statusFilter, setStatusFilter] = useState("All");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -40,29 +43,46 @@ const CodingInterviewsList = (props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchInterviewsData = useCallback(async () => {
-    if (!tenantId) {
-      setInterviewsData([]);
+  // Fetch coding interviews for a specific date (YYYY-MM-DD).
+  const fetchInterviewsData = useCallback(
+    async (dateString) => {
+      if (!tenantId) {
+        setInterviewsData([]);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
       setError(null);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await axios.get(apiUrl(`get-all-coding-interview-details/${tenantId}`));
-      setInterviewsData(Array.isArray(response.data) ? response.data : []);
-    } catch (err) {
-      setInterviewsData([]);
-      setError(getErrorMessage(err, "Failed to load coding interviews."));
-    } finally {
-      setLoading(false);
-    }
-  }, [tenantId]);
+      try {
+        const response = await axios.get(apiUrl(`get-all-coding-interview-details/${tenantId}`), {
+          params: dateString ? { date: dateString } : {},
+        });
+        setInterviewsData(Array.isArray(response.data) ? response.data : []);
+      } catch (err) {
+        setInterviewsData([]);
+        setError(getErrorMessage(err, "Failed to load coding interviews."));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [tenantId]
+  );
 
   useEffect(() => {
-    fetchInterviewsData();
+    fetchInterviewsData(filterDate || getTodayDateString());
+    // Only on mount / tenant change; date changes fetch via handleDateChange.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchInterviewsData]);
+
+  // When the date changes, fetch that IST day from the server (cleared -> today).
+  const handleDateChange = (e) => {
+    const value = e.target.value;
+    setFilterDate(value || "");
+    fetchInterviewsData(value || getTodayDateString());
+  };
+
+  const refetch = () => fetchInterviewsData(filterDate || getTodayDateString());
 
   const confirmDeleteInterview = async () => {
     setDeleting(true);
@@ -80,19 +100,8 @@ const CodingInterviewsList = (props) => {
   };
 
   const filteredData = useMemo(() => {
+    // The server already returns only the interviews for the requested IST day.
     let filtered = interviewsData;
-
-    // Filter by Date
-    if (filterDate) {
-      const selectedDate = new Date(filterDate).toDateString();
-      filtered = filtered.filter((interview) => {
-        if (!interview.start_date_time_ist) return false;
-        const interviewDate = new Date(
-          interview.start_date_time_ist.split(" ")[0].split("-").reverse().join("-")
-        );
-        return interviewDate.toDateString() === selectedDate;
-      });
-    }
 
     // Filter by Status
     if (statusFilter !== "All") {
@@ -110,7 +119,7 @@ const CodingInterviewsList = (props) => {
       );
     }
     return filtered;
-  }, [filterDate, statusFilter, searchTerm, interviewsData]);
+  }, [statusFilter, searchTerm, interviewsData]);
 
   const columns = [
     { dataField: "platform", text: "Platform", sort: true },
@@ -151,7 +160,7 @@ const CodingInterviewsList = (props) => {
             View
           </a>
             {interview.provisional && (
-              <RetryEvaluationButton interviewId={interview._id} interviewType="coding" label="Re-score with AI" title="Replace the provisional score with the AI evaluation" />
+              <RetryEvaluationButton interviewId={interview._id} interviewType="coding" label="Re-score with AI" title="Replace the provisional score with the AI evaluation" onDone={refetch} />
             )}
           </>
         ) : (
@@ -162,11 +171,13 @@ const CodingInterviewsList = (props) => {
               </Link>
             )}
             {canRetryEvaluation(interview.interview_status) && (
-              <RetryEvaluationButton interviewId={interview._id} interviewType="coding" title={interview.evaluation_error || ""} />
+              <RetryEvaluationButton interviewId={interview._id} interviewType="coding" title={interview.evaluation_error || ""} onDone={refetch} />
             )}
-            <Button color="danger" size="sm" onClick={() => setSelectedInterviewId(interview._id)}>
-              Delete
-            </Button>
+            {canDeleteInterview(interview.interview_status) && (
+              <Button color="danger" size="sm" onClick={() => setSelectedInterviewId(interview._id)}>
+                Delete
+              </Button>
+            )}
           </>
         ),
     },
@@ -224,9 +235,10 @@ const CodingInterviewsList = (props) => {
                   <Input
                     type="date"
                     value={filterDate}
-                    onChange={(e) => setFilterDate(e.target.value)}
+                    onChange={handleDateChange}
                     placeholder="Filter by Date"
                   />
+                  <small className="text-muted">Showing today by default</small>
                 </Col>
                 <Col xs="3">
                   <Input type="select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -246,7 +258,7 @@ const CodingInterviewsList = (props) => {
                 error={error}
                 empty={!tenantId || !filteredData.length}
                 emptyText={tenantId ? "No coding interviews found" : "Select a college"}
-                onRetry={fetchInterviewsData}
+                onRetry={refetch}
               >
                 <BootstrapTable
                   bootstrap4

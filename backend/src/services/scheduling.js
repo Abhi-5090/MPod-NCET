@@ -7,13 +7,15 @@ const Technology = require("../models/technology");
 const Module = require("../models/module");
 const Topic = require("../models/topic");
 const Company = require("../models/companies");
+const CompanyQuestion = require("../models/companyQuestion");
+const CodingQuestion = require("../models/codingQuestion");
 const credits = require("./credits");
 const { sendMailInBackground } = require("./mailer");
 const { withTransaction } = require("../lib/db");
 const { isStaffRole } = require("../config/roles");
 const { normaliseType, modelFor, labelFor, ALL_MODELS, assertInterviewAccess } = require("./interviewModels");
 const { resolveTenantScope } = require("../middlewares/auth");
-const { HttpError, badRequest, notFound, conflict, parseList, toInt, toDate, toObjectId, isObjectId } = require("../lib/http");
+const { HttpError, badRequest, notFound, conflict, parseList, toInt, toDate, toObjectId, isObjectId, escapeRegex } = require("../lib/http");
 
 const PLATFORMS = ["web", "mpod"];
 const MAX_BULK_ROWS = 2000;
@@ -40,18 +42,25 @@ async function findStudentInTenant(rollNo, tenantId) {
   return user;
 }
 
-async function assertNoOverlap({ rollNo, start, durationMinutes, excludeId }) {
+/**
+ * Refuses a second pending interview for the same student within ± the college's
+ * interview duration. Scoped to the college (roll numbers repeat across colleges;
+ * legacy interviews without tenant_id still count). Pass the transaction session so
+ * the check sees concurrent schedules for the same student (see lockStudent).
+ */
+async function assertNoOverlap({ rollNo, tenantId, start, durationMinutes, excludeId, session }) {
   const windowMs = durationMinutes * 60000;
   const query = {
     roll_no: rollNo,
     status: 1,
     start_date_time: { $gt: new Date(start.getTime() - windowMs), $lt: new Date(start.getTime() + windowMs) },
   };
+  if (tenantId) query.$or = [{ tenant_id: tenantId }, { tenant_id: null }];
   if (excludeId) query._id = { $ne: excludeId };
   const labels = ["Technology interview", "Company interview", "Coding interview"];
   for (let i = 0; i < ALL_MODELS.length; i++) {
     // eslint-disable-next-line no-await-in-loop
-    if (await ALL_MODELS[i].exists(query)) {
+    if (await ALL_MODELS[i].exists(query).session(session || null)) {
       throw badRequest(`${labels[i]} is already scheduled around this time. Please choose a different time.`, {
         code: "ALREADY_SCHEDULED",
       });
@@ -79,7 +88,7 @@ async function buildTypeFields(type, body, { partial = false } = {}) {
   if (type === "ai generated") {
     if (!partial || has("technology")) {
       const techId = toObjectId(body.technology, "technology");
-      if (!(await Technology.exists({ _id: techId }))) throw badRequest("Technology not found.");
+      if (!(await Technology.exists({ _id: techId, status: { $ne: 0 } }))) throw badRequest("Technology not found or inactive.");
       out.technology = techId;
     }
     if (!partial || has("module")) {
@@ -95,23 +104,23 @@ async function buildTypeFields(type, body, { partial = false } = {}) {
       out.level = String(body.level);
     }
     // Modules must belong to the technology, topics to the modules.
-    if (out.module || out.technology) {
+    if (out.module || out.technology || out.topic) {
       const techId = out.technology || body._existing?.technology;
       const mods = out.module || body._existing?.module || [];
-      const okMods = await Module.countDocuments({ _id: { $in: mods }, technology: techId });
-      if (okMods !== mods.length) throw badRequest("One or more modules do not belong to the selected technology.");
+      const okMods = await Module.countDocuments({ _id: { $in: mods }, technology: techId, status: { $ne: 0 } });
+      if (okMods !== mods.length) throw badRequest("One or more modules are inactive or do not belong to the selected technology.");
       const topics = out.topic || body._existing?.topic || [];
       if (topics.length) {
-        const okTopics = await Topic.countDocuments({ _id: { $in: topics }, module: { $in: mods } });
-        if (okTopics !== topics.length) throw badRequest("One or more topics do not belong to the selected modules.");
+        const okTopics = await Topic.countDocuments({ _id: { $in: topics }, module: { $in: mods }, status: { $ne: 0 } });
+        if (okTopics !== topics.length) throw badRequest("One or more topics are inactive or do not belong to the selected modules.");
       }
     }
   } else if (type === "company") {
     if (!partial || has("company")) {
       const companies = parseList(body.company).map((c) => toObjectId(c, "company"));
       if (!companies.length) throw badRequest("Select at least one company.");
-      if ((await Company.countDocuments({ _id: { $in: companies } })) !== companies.length) {
-        throw badRequest("One or more companies were not found.");
+      if ((await Company.countDocuments({ _id: { $in: companies }, status: { $ne: 0 } })) !== companies.length) {
+        throw badRequest("One or more companies were not found or are inactive.");
       }
       out.company = companies;
     }
@@ -127,11 +136,32 @@ async function buildTypeFields(type, body, { partial = false } = {}) {
     }
     if (has("tag")) {
       out.tag = toObjectId(body.tag, "tag");
+    } else if (partial && body.tag === null) {
+      out.tag = null; // tag cleared on edit
+    }
+    // Don't charge a credit for an interview that can never get questions.
+    if (out.company || out.type || out.round || "tag" in out) {
+      const ex = body._existing || {};
+      const match = { company: { $in: out.company || ex.company || [] }, status: { $ne: 0 } };
+      const round = out.round || ex.round;
+      const qtype = out.type || ex.type;
+      const tag = "tag" in out ? out.tag : ex.tag;
+      if (round && round.length) match.round = { $in: round };
+      if (qtype && qtype.length) match.type = { $in: qtype };
+      if (tag) match.tag = new mongoose.Types.ObjectId(String(tag));
+      if (!(await CompanyQuestion.countDocuments(match))) {
+        throw badRequest("No company questions match the selected company, type, round and tag. Choose other options.", { code: "NO_QUESTIONS" });
+      }
     }
   } else if (type === "coding") {
     if (!partial || has("level")) {
       if (!body.level || String(body.level).length > 50) throw badRequest("level is required.");
-      out.level = String(body.level);
+      out.level = String(body.level).trim();
+      const levelMatch = { status: { $ne: 0 } };
+      if (!/^any$/i.test(out.level)) levelMatch.complexity = new RegExp(`^${escapeRegex(out.level)}$`, "i");
+      if (!(await CodingQuestion.countDocuments(levelMatch))) {
+        throw badRequest(`No coding problems are available for level "${out.level}".`, { code: "NO_QUESTIONS" });
+      }
     }
   }
   return out;
@@ -169,18 +199,37 @@ Thank you!`,
 }
 
 /**
+ * Serialises scheduling for one student: two transactions that both write this
+ * marker conflict, so the second one retries and its overlap check sees the first
+ * one's interview (a double click or single + bulk at once can't double-book).
+ */
+async function lockStudent(userId, session) {
+  if (!session) return;
+  await User.collection.updateOne({ _id: userId }, { $set: { schedule_lock_at: new Date() } }, { session });
+}
+
+/** True when the start window has passed without an attempt (a no-show). */
+function isExpiredUnstarted(doc) {
+  if (doc.attempt?.started_at || doc.attempt?.generation_failed_at) return false;
+  return Date.now() > new Date(doc.start_date_time).getTime() + env.startGraceMinutes * 60000;
+}
+
+/**
  * Schedules one interview for one student: validates, checks overlap, deducts a
  * credit and creates the interview atomically. Returns the saved document.
  */
 async function scheduleOne({ type, tenant, rollNo, start, fields, actor }) {
   const student = await findStudentInTenant(rollNo, tenant._id);
   const duration = tenant.interview_duration_minutes || 30;
-  await assertNoOverlap({ rollNo: student.roll_no, start, durationMinutes: duration });
+  // Fast check first (clear error without opening a transaction), then again inside it.
+  await assertNoOverlap({ rollNo: student.roll_no, tenantId: tenant._id, start, durationMinutes: duration });
 
   const Model = modelFor(type);
   await credits.ensureOpeningBalance(tenant._id);
   let created = null;
   const saved = await withTransaction(async (session) => {
+    await lockStudent(student._id, session);
+    await assertNoOverlap({ rollNo: student.roll_no, tenantId: tenant._id, start, durationMinutes: duration, session });
     const doc = new Model({
       ...fields,
       roll_no: student.roll_no,
@@ -299,6 +348,10 @@ async function updateScheduled(req, rawType, id) {
   if (doc.status !== 1 || doc.attempt?.started_at || (doc.question_details && doc.question_details.length)) {
     throw conflict("This interview has already been started and can no longer be edited.");
   }
+  // A no-show's credit is used; moving it to a new time would reuse the credit.
+  if (isExpiredUnstarted(doc)) {
+    throw conflict("This interview has expired and can no longer be edited. Schedule a new interview instead.", { code: "EXPIRED" });
+  }
 
   const tenantId = doc.tenant_id || (await User.findOne({ roll_no: doc.roll_no }).select("tenant_id").lean())?.tenant_id;
   const tenant = await loadActiveTenant(tenantId);
@@ -319,7 +372,7 @@ async function updateScheduled(req, rawType, id) {
     update.start_date_time = start;
   }
   if (update.roll_no || update.start_date_time) {
-    await assertNoOverlap({ rollNo, start, durationMinutes: tenant.interview_duration_minutes || 30, excludeId: doc._id });
+    await assertNoOverlap({ rollNo, tenantId: tenant._id, start, durationMinutes: tenant.interview_duration_minutes || 30, excludeId: doc._id });
   }
   if (!doc.tenant_id) update.tenant_id = tenant._id;
 
@@ -340,8 +393,15 @@ async function deleteScheduled(req, rawType, id) {
   const doc = await Model.findById(id);
   await assertInterviewAccess(req, doc);
 
+  // Refund only if the student never started and the start window hasn't passed (a no-show
+  // keeps its credit used), or if questions could not be prepared (our fault).
+  // An interview being taken or scored can't be deleted (the student's answers would be lost).
+  const inProgress = doc.status === 1 && Boolean(doc.attempt?.started_at) && doc.evaluation_status !== "failed";
+  if (inProgress) {
+    throw conflict("This interview is in progress or being evaluated and can't be deleted right now.", { code: "IN_PROGRESS" });
+  }
   const neverStarted =
-    doc.status === 1 && !doc.attempt?.started_at && !(doc.question_details && doc.question_details.length);
+    doc.status === 1 && !doc.attempt?.started_at && !(doc.question_details && doc.question_details.length) && !isExpiredUnstarted(doc);
   const tenantId = doc.tenant_id || (await User.findOne({ roll_no: doc.roll_no }).select("tenant_id").lean())?.tenant_id;
 
   if (tenantId) await credits.ensureOpeningBalance(tenantId);

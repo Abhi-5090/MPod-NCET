@@ -214,7 +214,8 @@ const sendOtp = asyncHandler(async (req, res) => {
         $unset: { otp: "" },
       }
     );
-    await mailer.sendMail({
+    // Sent in the background: the response time must not reveal whether the account exists.
+    mailer.sendMailInBackground({
       to: user.email,
       subject: "Your mPOD password reset code",
       text: `Hello ${user.first_name || ""},\n\nYour OTP to reset your mPOD password is: ${otp}\n\nIt expires in ${OTP_TTL_MINUTES} minutes. If you did not request this, you can ignore this email.\n\nThank you!`,

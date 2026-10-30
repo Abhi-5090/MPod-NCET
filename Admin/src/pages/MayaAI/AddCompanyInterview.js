@@ -22,11 +22,7 @@ import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
 import { apiUrl, getErrorMessage } from "../../config/api";
 import useTenantSelection, { TenantSelect } from "./useTenantSelection";
-
-const statusOptions = [
-  { label: "Active", value: "1" },
-  { label: "not Active", value: "0" },
-];
+import { isActiveOption, questionCountError } from "./interviewHelpers";
 
 const roundOptions = [
   { label: "TR1", value: "TR1" },
@@ -60,7 +56,6 @@ const AddCompanyInterview = (props) => {
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [startDate, setStartDate] = useState(null);
   const [rollNo, setRollNo] = useState("");
-  const [selectedStatus, setSelectedStatus] = useState(null)
   const [selectedRound, setSelectedRound] = useState(null);
   const [selectedInterviewType, setSelectedInterviewType] = useState(null);
   const [selectedPlatform, setSelectedPlatform] = useState(null);
@@ -102,7 +97,7 @@ const AddCompanyInterview = (props) => {
     }
   };
 
-  const companyOptions = companies.map(company => ({
+  const companyOptions = companies.filter(isActiveOption).map(company => ({
     label: company.company_name,
     value: company._id
   }));
@@ -156,10 +151,6 @@ const AddCompanyInterview = (props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCompany, selectedType, selectedRound, selectedTag]);
 
-  const handlestatusSelect = (selectedLevel) => {
-    setSelectedStatus(selectedLevel);
-  };
-
   const AddInterview = async () => {
     if (!tenantId) {
       toast.warn("Select a college");
@@ -172,11 +163,27 @@ const AddCompanyInterview = (props) => {
       !selectedType?.length ||
       !selectedRound?.length ||
       !startDate ||
-      !data.no_of_questions ||
-      !selectedStatus
+      !data.no_of_questions
     ) {
       toast.warn("Please fill all required fields");
       return;
+    }
+
+    const countError = questionCountError(data.no_of_questions, 1, 30);
+    if (countError) {
+      toast.warn(countError);
+      return;
+    }
+
+    // availableQuestions is undefined while unknown (loading / failed); only block on a known 0.
+    if (typeof availableQuestions === "number") {
+      if (availableQuestions === 0) {
+        toast.error("No company questions match the selected company, type, round and tag. Change the filters to schedule this interview.");
+        return;
+      }
+      if (availableQuestions < Number(data.no_of_questions)) {
+        toast.warning(`Only ${availableQuestions} question(s) match the selected filters (requested ${data.no_of_questions}).`);
+      }
     }
 
     if (selectedInterviewType.value === "single" && !rollNo.trim()) {
@@ -198,7 +205,6 @@ const AddCompanyInterview = (props) => {
       tag: selectedTag?.value,
       start_date_time: startDate,
       questions_count: data.no_of_questions,
-      status: selectedStatus.value,
       created_by: user.roll_no,
       tenant_id: tenantId,
     };
@@ -220,7 +226,6 @@ const AddCompanyInterview = (props) => {
         if (dataList.tag) formData.append('tag', dataList.tag);
         formData.append('start_date_time', dataList.start_date_time);
         formData.append('questions_count', dataList.questions_count);
-        formData.append('status', dataList.status);
         formData.append('created_by', dataList.created_by);
         formData.append('tenant_id', dataList.tenant_id);
         const response = await axios.post(apiUrl('bulk-add-company-interviews'), formData, {
@@ -398,19 +403,6 @@ const AddCompanyInterview = (props) => {
                   </Col>
 
                 </Row>
-                <Row>
-                  <Col md="6">
-                    <div className="mb-3">
-                      <Label>Status</Label>
-                      <Select
-                        value={selectedStatus}
-                        onChange={handlestatusSelect}
-                        options={statusOptions}
-                        classNamePrefix="select2-selection"
-                      />
-                    </div>
-                  </Col>
-                </Row>
 
                 <Button color="primary" type="button" onClick={AddInterview} disabled={isLoading}>
                   {isLoading ? "Processing..." : "Submit"}
@@ -421,6 +413,12 @@ const AddCompanyInterview = (props) => {
         </Col>
         <Col xl="6">
           <h3>Available Questions: {availableQuestions ?? "-"}</h3>
+          {availableQuestions === 0 && (
+            <p className="text-danger">No questions match these filters. The interview cannot be scheduled.</p>
+          )}
+          {availableQuestions > 0 && Number(data.no_of_questions) > availableQuestions && (
+            <p className="text-warning">Fewer questions are available than requested.</p>
+          )}
           {failedResults.length > 0 && (
             <div className="mt-4">
               <div className="card border-danger shadow-sm">

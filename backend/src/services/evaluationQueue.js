@@ -15,7 +15,13 @@ const OUTAGE_BACKOFF_MS = [2, 5, 10, 20, 30].map((m) => m * 60 * 1000);
 const SWEEP_MS = 60 * 1000;
 
 const queue = [];
+const rescoreQueue = [];
 let running = 0;
+let sweeping = false;
+const rescoring = new Set(); // interview ids being re-scored in this process
+// AI re-scores of a provisional result that fail for a reason other than an outage
+// are retried hourly up to this many times; the provisional score then stays.
+const MAX_RESCORE_ATTEMPTS = 5;
 let sweepTimer = null;
 
 // Claims an interview for evaluation. The lease makes this safe across several
@@ -165,6 +171,29 @@ async function runJob(type, id) {
     }
     console.error(`[evaluation] ${type} ${doc._id} attempt ${doc.evaluation_attempts} failed:`, err.message);
     const failed = doc.evaluation_attempts >= MAX_ATTEMPTS;
+    if (failed && type !== "coding") {
+      // The AI keeps failing on this interview: give the student a provisional score
+      // rather than none; the AI re-score is retried a limited number of times.
+      const out = provisionalDoc(doc);
+      await Model.updateOne(mine, {
+        $set: {
+          question_details: out.question_details,
+          overall_analysis: out.overall_analysis,
+          status: 0,
+          evaluation_status: "completed",
+          evaluation_mode: "provisional",
+          ai_rescore_pending: true,
+          rescore_attempts: 0,
+          rescore_next_at: new Date(Date.now() + 60 * 60 * 1000),
+          evaluated_at: new Date(),
+          evaluation_error: `Provisional: AI evaluation failed (${String(err.message || err)})`.slice(0, 500),
+          evaluation_lease_until: null,
+          evaluation_lease_id: null,
+          evaluation_waiting_for_ai: false,
+        },
+      });
+      return;
+    }
     await Model.updateOne(
       mine,
       {
@@ -172,6 +201,7 @@ async function runJob(type, id) {
           evaluation_lease_id: null,
           evaluation_status: failed ? "failed" : "pending",
           evaluation_error: String(err.message || err).slice(0, 500),
+          evaluation_waiting_for_ai: false,
           // back off before the next try
           evaluation_lease_until: failed ? null : new Date(Date.now() + doc.evaluation_attempts * 60 * 1000),
         },
@@ -183,10 +213,11 @@ async function runJob(type, id) {
 }
 
 function pump() {
-  while (running < env.evalConcurrency && queue.length) {
-    const job = queue.shift();
+  while (running < env.evalConcurrency && (queue.length || rescoreQueue.length)) {
+    // First-time evaluations (a student may be waiting) always go before re-scores.
+    const job = queue.length ? queue.shift() : rescoreQueue.shift();
     running++;
-    runJob(job.type, job.id)
+    (job.kind === "rescore" ? rescore(job.type, job.id) : runJob(job.type, job.id))
       .catch((e) => console.error("[evaluation] unexpected", e))
       .finally(() => {
         running--;
@@ -199,7 +230,15 @@ function pump() {
 function enqueue(type, id) {
   const t = normaliseType(type);
   if (queue.some((j) => j.type === t && String(j.id) === String(id))) return;
-  queue.push({ type: t, id });
+  queue.push({ kind: "evaluate", type: t, id });
+  pump();
+}
+
+/** Queues an AI re-score of a provisional result (runs after waiting evaluations). */
+function enqueueRescore(type, id) {
+  const t = normaliseType(type);
+  if (rescoreQueue.some((j) => j.type === t && String(j.id) === String(id))) return;
+  rescoreQueue.push({ kind: "rescore", type: t, id });
   pump();
 }
 
@@ -216,6 +255,12 @@ async function rescore(type, id) {
     { new: true }
   );
   if (!doc) return;
+  rescoring.add(String(doc._id));
+  // Keep the lease while the AI works (a slow GPU can take longer than LEASE_MS).
+  const heartbeat = setInterval(() => {
+    Model.updateOne({ _id: doc._id, ai_rescore_pending: true }, { $set: { rescore_next_at: new Date(Date.now() + LEASE_MS) } }).catch(() => {});
+  }, HEARTBEAT_MS);
+  heartbeat.unref();
   try {
     const out = await evaluateTracked(type, doc);
     await Model.updateOne(
@@ -235,8 +280,27 @@ async function rescore(type, id) {
     );
     console.log(`[evaluation] ${type} ${doc._id}: provisional score replaced by AI evaluation.`);
   } catch (err) {
-    const wait = aiStatus.isOutage(err) ? 30 * 60 * 1000 : 60 * 60 * 1000;
-    await Model.updateOne({ _id: doc._id }, { $set: { rescore_next_at: new Date(Date.now() + wait) } });
+    if (aiStatus.isOutage(err)) {
+      await Model.updateOne({ _id: doc._id }, { $set: { rescore_next_at: new Date(Date.now() + 30 * 60 * 1000) } });
+    } else {
+      const attempts = (doc.rescore_attempts || 0) + 1;
+      const giveUp = attempts >= MAX_RESCORE_ATTEMPTS;
+      if (giveUp) console.warn(`[evaluation] ${type} ${doc._id}: AI re-score failed ${attempts} times; keeping the provisional score.`);
+      await Model.updateOne(
+        { _id: doc._id },
+        {
+          $set: {
+            rescore_attempts: attempts,
+            ai_rescore_pending: !giveUp,
+            rescore_next_at: giveUp ? null : new Date(Date.now() + 60 * 60 * 1000),
+            ...(giveUp ? { evaluation_error: `Provisional: AI re-score failed (${String(err.message || err)})`.slice(0, 500) } : {}),
+          },
+        }
+      );
+    }
+  } finally {
+    clearInterval(heartbeat);
+    rescoring.delete(String(doc._id));
   }
 }
 
@@ -246,6 +310,16 @@ async function rescore(type, id) {
  * still evaluated.
  */
 async function sweep() {
+  if (sweeping) return; // the previous sweep is still running
+  sweeping = true;
+  try {
+    await sweepOnce();
+  } finally {
+    sweeping = false;
+  }
+}
+
+async function sweepOnce() {
   const now = new Date();
   const types = ["ai generated", "company", "coding"];
   for (const type of types) {
@@ -271,20 +345,19 @@ async function sweep() {
       .limit(200)
       .lean();
     due.forEach((d) => enqueue(type, d._id));
+  }
 
-    // Provisional scores waiting for the AI: only try while the AI looks available.
-    if (aiStatus.getStatus().available) {
-      // eslint-disable-next-line no-await-in-loop
-      const rescoreDue = await Model.find({
-        ai_rescore_pending: true,
-        $or: [{ rescore_next_at: null }, { rescore_next_at: { $lte: now } }],
-      })
-        .select("_id")
-        .limit(20)
-        .lean();
-      // eslint-disable-next-line no-await-in-loop
-      for (const d of rescoreDue) await rescore(type, d._id).catch(() => {});
-    }
+  // Provisional scores waiting for the AI: only while the AI looks available, and
+  // queued behind first-time evaluations instead of being run inside the sweep.
+  if (!aiStatus.getStatus().available) return;
+  for (const type of types) {
+    // eslint-disable-next-line no-await-in-loop
+    const rescoreDue = await modelFor(type)
+      .find({ ai_rescore_pending: true, $or: [{ rescore_next_at: null }, { rescore_next_at: { $lte: now } }] })
+      .select("_id")
+      .limit(20)
+      .lean();
+    rescoreDue.forEach((d) => enqueueRescore(type, d._id));
   }
 }
 
@@ -304,10 +377,11 @@ function stop() {
 /** Staff action: retry an evaluation that ended in "failed". */
 async function retry(type, id) {
   const Model = modelFor(type);
-  // Provisional score: try the AI re-score right now.
-  const prov = await Model.updateOne({ _id: id, ai_rescore_pending: true }, { $set: { rescore_next_at: null } });
+  // Provisional score: try the AI re-score now, unless one is already running here.
+  if (rescoring.has(String(id))) return Boolean(await Model.exists({ _id: id, ai_rescore_pending: true }));
+  const prov = await Model.updateOne({ _id: id, ai_rescore_pending: true }, { $set: { rescore_next_at: null, rescore_attempts: 0 } });
   if (prov.matchedCount) {
-    rescore(type, id).catch(() => {});
+    enqueueRescore(type, id);
     return true;
   }
   const r = await Model.updateOne(
@@ -318,6 +392,6 @@ async function retry(type, id) {
   return r.modifiedCount > 0;
 }
 
-const idle = () => running === 0 && queue.length === 0;
+const idle = () => running === 0 && queue.length === 0 && rescoreQueue.length === 0;
 
-module.exports = { enqueue, start, stop, sweep, retry, idle, runJob, rescore };
+module.exports = { enqueue, enqueueRescore, start, stop, sweep, retry, idle, runJob, rescore };

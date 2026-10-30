@@ -87,8 +87,12 @@ async function buildQuestions(type, doc) {
   }
 
   // coding
+  // Level "any" (offered in the admin portal) means any complexity.
+  const level = String(doc.level || "").trim();
+  const codingMatch = { status: { $ne: 0 } };
+  if (level && !/^any$/i.test(level)) codingMatch.complexity = new RegExp(`^${escapeRegex(level)}$`, "i");
   const rows = await CodingQuestion.aggregate([
-    { $match: { complexity: new RegExp(`^${escapeRegex(String(doc.level || ""))}$`, "i"), status: { $ne: 0 } } },
+    { $match: codingMatch },
     { $sample: { size: Math.min(count, 10) } },
   ]);
   if (!rows.length) throw conflict("No coding problems are available for this level. Please contact your administrator.");
@@ -237,6 +241,14 @@ async function startAttempt({ type: rawType, interviewId, principal }) {
     const tenantId = await tenantOfInterview(doc);
     if (!tenantId || String(tenantId) !== String(principal.device.tenant_id)) throw notFound("Interview not found.");
     if (doc.platform !== "mpod") throw forbidden("This interview must be taken on the mPod website.");
+    // The student must still be an active student of this college.
+    const student = await User.findOne({ roll_no: doc.roll_no, tenant_id: principal.device.tenant_id }).select("status").lean();
+    if (!student || student.status === 0) throw notFound("Interview not found.");
+    // An attempt in progress can only be resumed on the kiosk it started on
+    // (someone at another kiosk can't take it over by typing the roll number).
+    if (doc.attempt?.started_at && doc.attempt.device_id && String(doc.attempt.device_id) !== String(principal.device._id)) {
+      throw conflict("This interview is in progress on another kiosk. Continue it there, or ask your administrator.", { code: "OTHER_DEVICE" });
+    }
   } else {
     throw forbidden();
   }
@@ -275,6 +287,10 @@ async function startAttempt({ type: rawType, interviewId, principal }) {
     } else {
       doc = await Model.findById(doc._id); // started elsewhere a moment ago; treat as resume
       if (!doc || isSubmitted(doc)) throw conflict("This interview has already been submitted.", { code: "ALREADY_SUBMITTED" });
+      // The other request's question preparation failed and released the claim: try again.
+      if (!doc.attempt || !doc.attempt.started_at) {
+        throw conflict("Your interview is being prepared. Please try again in a few seconds.", { code: "PREPARING" });
+      }
     }
   }
 
@@ -386,6 +402,17 @@ async function saveAnswer({ type, interviewId, token, body }) {
   if (isCoding) {
     entry.idea = cleanText(body.idea, ANSWER_LIMITS.verbal);
     entry.optimized_answer = cleanText(body.optimized_answer, max);
+  }
+
+  // A blank final save (e.g. time ran out right after a resume) must not wipe text that an
+  // earlier autosave already stored for this question.
+  if (entry.final) {
+    const prev = (doc.answers || []).find((a) => a.qid === qid);
+    if (prev) {
+      if (!entry.answer.trim() && prev.answer) entry.answer = prev.answer;
+      if (isCoding && !entry.idea.trim() && prev.idea) entry.idea = prev.idea;
+      if (isCoding && !entry.optimized_answer.trim() && prev.optimized_answer) entry.optimized_answer = prev.optimized_answer;
+    }
   }
 
   const open = { status: 1, evaluation_status: null };
@@ -576,7 +603,12 @@ async function findKioskInterview({ rollNo, device }) {
       const tenantId = await tenantOfInterview(doc);
       if (String(tenantId) !== String(device.tenant_id)) continue;
       const startMs = new Date(doc.start_date_time).getTime();
-      const startable = !doc.attempt?.started_at && now <= startMs + env.startGraceMinutes * 60000;
+      // Same rule as startAttempt: a retry is allowed for 15 minutes after questions failed to prepare.
+      const failedAt = doc.attempt?.generation_failed_at ? new Date(doc.attempt.generation_failed_at).getTime() : 0;
+      const retryWindowOpen = failedAt && now - failedAt < 15 * 60000;
+      const startable = !doc.attempt?.started_at && (now <= startMs + env.startGraceMinutes * 60000 || retryWindowOpen);
+      // An attempt started on another kiosk is not offered here.
+      if (doc.attempt?.started_at && doc.attempt.device_id && String(doc.attempt.device_id) !== String(device._id)) continue;
       const resumable =
         doc.attempt?.started_at && (!doc.attempt.deadline_at || now <= new Date(doc.attempt.deadline_at).getTime());
       if (startable || resumable) {

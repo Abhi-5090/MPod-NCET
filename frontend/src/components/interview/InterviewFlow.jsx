@@ -32,6 +32,8 @@ function InterviewFlow({ details, startSession, onExit, kiosk }) {
   const emotionsRef = useRef(undefined);
   const startSessionRef = useRef(startSession);
   startSessionRef.current = startSession;
+  const retryTimerRef = useRef(null);
+  const unmountedRef = useRef(false);
   const [ready, setReady] = useState(false);
 
   // Claim the attempt and fetch the questions right away (retries "being prepared").
@@ -40,14 +42,19 @@ function InterviewFlow({ details, startSession, onExit, kiosk }) {
     startingRef.current = true;
     try {
       const res = await startSessionRef.current();
+      if (unmountedRef.current) return;
       clientRef.current = createSessionClient(res.data, { rememberToken: Boolean(kiosk) });
-      setSession(res.data);
+      // Clock offset measured once, when the start response arrives, so the
+      // interview screens share one stable deadline.
+      const serverNow = new Date(res.data.server_time).getTime();
+      setSession({ ...res.data, clock_offset: Number.isFinite(serverNow) ? serverNow - Date.now() : 0 });
       setReady(true);
     } catch (err) {
       startingRef.current = false;
+      if (unmountedRef.current) return;
       const data = err && err.response && err.response.data;
       if (data && data.code === "PREPARING" && attempt < 20) {
-        setTimeout(() => begin(attempt + 1), 3000);
+        retryTimerRef.current = setTimeout(() => begin(attempt + 1), 3000);
         return;
       }
       setError(errorMessage(err, "Could not start the interview."));
@@ -56,7 +63,12 @@ function InterviewFlow({ details, startSession, onExit, kiosk }) {
   }, [kiosk]);
 
   useEffect(() => {
+    unmountedRef.current = false;
     begin();
+    return () => {
+      unmountedRef.current = true;
+      clearTimeout(retryTimerRef.current);
+    };
   }, [begin]);
 
   // Instructions countdown; the interview opens when it ends and the questions are ready.
@@ -117,8 +129,16 @@ function InterviewFlow({ details, startSession, onExit, kiosk }) {
           setStage("error");
           return;
         }
-      } catch (_) {
-        /* keep polling */
+      } catch (err) {
+        const st = err && err.response && err.response.status;
+        // 4xx (e.g. 401) will not fix itself; network errors and 5xx are retried.
+        if (st && st >= 400 && st < 500 && st !== 429) {
+          if (!cancelled) {
+            setError(errorMessage(err, "Could not check the evaluation status. Your answers are saved; the report will appear in your dashboard."));
+            setStage("error");
+          }
+          return;
+        }
       }
       if (!cancelled && tries < 120) setTimeout(poll, 3000);
       else if (!cancelled) {

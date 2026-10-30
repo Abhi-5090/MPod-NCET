@@ -21,7 +21,7 @@ export const studentReportUrl = (page, params) => {
 export const deleteResultMessage = data => {
   const message = (data && data.message) || "Interview deleted"
   if (data && data.refunded === true) return `${message} — Credit refunded`
-  if (data && data.refunded === false) return `${message} — No refund (interview already started)`
+  if (data && data.refunded === false) return `${message} — No refund (interview started or expired)`
   return message
 }
 
@@ -48,3 +48,17 @@ export const canRetryEvaluation = (status) => status === "Evaluation failed" || 
 // YYYY-MM-DD for today in IST (UTC+5:30). Lists open on today so freshly scheduled
 // interviews are visible straight away.
 export const getTodayDateString = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+
+// Delete is only allowed before the attempt starts, or once it can no longer progress.
+export const canDeleteInterview = (status) =>
+  status === "Upcoming" || status === "Expired" || status === "Evaluation failed";
+
+// Inactive technologies/modules/topics/companies (status 0) are hidden from scheduling pickers.
+export const isActiveOption = (item) => !!item && item.status !== 0 && item.status !== "0";
+
+// Validation message for the number of questions, or null when it is within min..max.
+export const questionCountError = (value, min, max) => {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < min || n > max) return `please enter ${min} to ${max} questions`;
+  return null;
+};

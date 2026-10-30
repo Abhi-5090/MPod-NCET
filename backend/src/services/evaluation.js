@@ -4,14 +4,21 @@ const env = require("../config/env");
 const ai = require("./ai");
 
 // Runs async fn over items with at most `limit` in flight, preserving order.
+// After the first failure no new items are started (the whole result is discarded).
 async function mapLimit(items, limit, fn) {
   const out = new Array(items.length);
   let next = 0;
+  let failed = false;
   const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
-    while (next < items.length) {
+    while (!failed && next < items.length) {
       const i = next++;
-      // eslint-disable-next-line no-await-in-loop
-      out[i] = await fn(items[i], i);
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        out[i] = await fn(items[i], i);
+      } catch (err) {
+        failed = true;
+        throw err;
+      }
     }
   });
   await Promise.all(workers);
@@ -34,6 +41,18 @@ const clampScore = (v) => {
   const n = typeof v === "string" ? parseFloat(v.replace("%", "")) : Number(v);
   if (!Number.isFinite(n)) return 0;
   return Math.max(0, Math.min(100, Math.round(n)));
+};
+
+// A short display string from whatever a model returned (strings, numbers, objects).
+const text = (v, fallback = "Unknown") => {
+  if (v == null || v === "") return fallback;
+  if (typeof v === "string") return v.slice(0, 500);
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  try {
+    return JSON.stringify(v).slice(0, 500);
+  } catch {
+    return fallback;
+  }
 };
 
 const confidenceLevel = (accuracy) => {
@@ -250,11 +269,17 @@ async function scoreCodingAnswer(q, a) {
     Object.assign(result, {
       is_code: true,
       accuracy: String(clampScore(data.accuracy)),
-      efficiency: { ...result.efficiency, ...(data.efficiency || {}) },
-      code_quality: { ...result.code_quality, ...(data.code_quality || {}) },
-      logical_approach: String(data.logical_approach || "Unknown"),
-      output_format: String(data.output_format || "Unknown"),
-      observations: Array.isArray(data.observations) ? data.observations.map(String) : [],
+      efficiency: {
+        time_complexity: text(data.efficiency?.time_complexity, result.efficiency.time_complexity),
+        space_complexity: text(data.efficiency?.space_complexity, result.efficiency.space_complexity),
+      },
+      code_quality: {
+        readability: text(data.code_quality?.readability, result.code_quality.readability),
+        variable_naming: text(data.code_quality?.variable_naming, result.code_quality.variable_naming),
+      },
+      logical_approach: text(data.logical_approach),
+      output_format: text(data.output_format),
+      observations: Array.isArray(data.observations) ? data.observations.map((o) => text(o, "")).filter(Boolean) : [],
       analysis: String(data.analysis || ""),
     });
   }

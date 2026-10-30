@@ -7,30 +7,78 @@ const CompanyQuestion = require("../models/companyQuestion");
 const Tenant = require("../models/tenant");
 
 const mongoose = require('mongoose');
+const { STAFF_ROLES } = require("../config/roles");
 const { asyncHandler } = require("../lib/http");
 const { istDayRange } = require("../lib/time");
+
+/**
+ * Attributes each interview to its college: the interview's own tenant_id, or, for old
+ * interviews without one, the college of the only user with that roll number (roll
+ * numbers repeat across colleges, so ambiguous ones are not attributed). Exposes it as
+ * userDetails.tenant_id, the field the pipelines below match and group on.
+ */
+const BY_INTERVIEW_TENANT = [
+  {
+    $lookup: {
+      from: "users",
+      let: { r: "$roll_no", t: { $ifNull: ["$tenant_id", null] } },
+      pipeline: [
+        { $match: { $expr: { $and: [{ $eq: ["$$t", null] }, { $eq: ["$roll_no", "$$r"] }] } } },
+        { $project: { tenant_id: 1 } },
+        { $limit: 2 },
+      ],
+      as: "_legacyUsers",
+    },
+  },
+  {
+    $addFields: {
+      userDetails: {
+        tenant_id: {
+          $ifNull: [
+            "$tenant_id",
+            { $cond: [{ $eq: [{ $size: "$_legacyUsers" }, 1] }, { $arrayElemAt: ["$_legacyUsers.tenant_id", 0] }, null] },
+          ],
+        },
+      },
+    },
+  },
+  { $match: { "userDetails.tenant_id": { $ne: null } } },
+];
+
+// Attempted = the student submitted (evaluation may still be running or have failed).
+const ATTEMPTED = { $or: [{ status: 0 }, { submitted_at: { $exists: true } }, { evaluation_status: { $ne: null } }] };
+const ATTEMPTED_EXPR = {
+  $or: [{ $eq: ["$status", 0] }, { $gt: ["$submitted_at", null] }, { $ne: [{ $ifNull: ["$evaluation_status", null] }, null] }],
+};
+
 
 const userStats = async (req, res, next) => {
   const tenant = req.params.tid;
   try {
     const users = await User.aggregate([
       {
+        // active students only (staff and deactivated accounts are not counted)
         $match: {
-          tenant_id: new mongoose.Types.ObjectId(tenant)
+          tenant_id: new mongoose.Types.ObjectId(tenant),
+          role: { $nin: STAFF_ROLES },
+          status: { $ne: 0 },
         }
       },
       {
         $group: {
-          _id: "$gender",
+          _id: { $toLower: { $ifNull: ["$gender", ""] } },
           count: { $sum: 1 }
         }
       }
     ]);
 
-    let stats = { male: 0, female: 0 };
+    // total includes students with another or no gender recorded
+    let stats = { male: 0, female: 0, other: 0, total: 0 };
     users.forEach(user => {
       if (user._id === 'male') stats.male = user.count;
       else if (user._id === 'female') stats.female = user.count;
+      else stats.other += user.count;
+      stats.total += user.count;
     });
 
     return res.status(200).json(stats);
@@ -44,21 +92,9 @@ const getInterviewStats = async (req, res) => {
     const tenant_id = req.params.tid;
     const commonPipeline = [
       {
-        $match: {
-          status: 0
-        }
+        $match: ATTEMPTED
       },
-      {
-        $lookup: {
-          from: "users",
-          localField: "roll_no",
-          foreignField: "roll_no",
-          as: "userDetails",
-        },
-      },
-      {
-        $unwind: "$userDetails"
-      },
+      ...BY_INTERVIEW_TENANT,
       {
         $match: {
           "userDetails.tenant_id": new mongoose.Types.ObjectId(tenant_id),
@@ -85,17 +121,7 @@ const getAssignedInterviewStats = async (req, res) => {
   try {
     const tenant_id = req.params.tid;
     const commonPipeline = [
-      {
-        $lookup: {
-          from: "users",
-          localField: "roll_no",
-          foreignField: "roll_no",
-          as: "userDetails",
-        },
-      },
-      {
-        $unwind: "$userDetails"
-      },
+      ...BY_INTERVIEW_TENANT,
       {
         $match: {
           "userDetails.tenant_id": new mongoose.Types.ObjectId(tenant_id),
@@ -124,21 +150,9 @@ const getPlatformStats = async (req, res, next) => {
   try {
     const pipeline = [
       {
-        $match: {
-          status: 0
-        }
+        $match: ATTEMPTED
       },
-      {
-        $lookup: {
-          from: "users",
-          localField: "roll_no",
-          foreignField: "roll_no",
-          as: "userDetails",
-        },
-      },
-      {
-        $unwind: "$userDetails"
-      },
+      ...BY_INTERVIEW_TENANT,
       {
         $match: {
           "userDetails.tenant_id": new mongoose.Types.ObjectId(tenant),
@@ -232,17 +246,7 @@ const getYesterdayAssignedInterviewStats = async (req, res) => {
     const { start: startOfYesterday, end: endOfYesterday } = istDayRange(null, -1);
 
     const getPipeline = () => ([
-      {
-        $lookup: {
-          from: "users",
-          localField: "roll_no",
-          foreignField: "roll_no",
-          as: "userDetails",
-        },
-      },
-      {
-        $unwind: "$userDetails"
-      },
+      ...BY_INTERVIEW_TENANT,
       {
         $match: {
           "userDetails.tenant_id": new mongoose.Types.ObjectId(tenant_id),
@@ -289,21 +293,9 @@ const getYesterdayAttemptedInterviewStats = async (req, res) => {
 
     const getPipeline = () => ([
       {
-        $match: {
-          status: 0
-        }
+        $match: ATTEMPTED
       },
-      {
-        $lookup: {
-          from: "users",
-          localField: "roll_no",
-          foreignField: "roll_no",
-          as: "userDetails",
-        },
-      },
-      {
-        $unwind: "$userDetails"
-      },
+      ...BY_INTERVIEW_TENANT,
       {
         $match: {
           "userDetails.tenant_id": new mongoose.Types.ObjectId(tenant_id),
@@ -358,15 +350,7 @@ const getYesterdayTechStats = async (req, res) => {
           },
         },
       },
-      {
-        $lookup: {
-          from: "users",
-          localField: "roll_no",
-          foreignField: "roll_no",
-          as: "userDetails",
-        },
-      },
-      { $unwind: "$userDetails" },
+      ...BY_INTERVIEW_TENANT,
       {
         $match: {
           "userDetails.tenant_id": new mongoose.Types.ObjectId(tenant_id),
@@ -420,17 +404,7 @@ const getOverAllYesterdayAssignedInterviewStats = async (req, res) => {
     const { start: startOfYesterday, end: endOfYesterday } = istDayRange(null, -1);
 
     const getPipeline = () => ([
-      {
-        $lookup: {
-          from: "users",
-          localField: "roll_no",
-          foreignField: "roll_no",
-          as: "userDetails",
-        },
-      },
-      {
-        $unwind: "$userDetails"
-      },
+      ...BY_INTERVIEW_TENANT,
       {
         $match: {
           // "userDetails.tenant_id": new mongoose.Types.ObjectId(tenant_id),
@@ -479,22 +453,14 @@ const getYesterdayAttemptedTechStats = async (req, res) => {
     const pipeline = [
       {
         $match: {
-          status: 0,
+          ...ATTEMPTED,
           start_date_time: {
             $gte: startOfYesterday,
             $lte: endOfYesterday,
           },
         },
       },
-      {
-        $lookup: {
-          from: "users",
-          localField: "roll_no",
-          foreignField: "roll_no",
-          as: "userDetails",
-        },
-      },
-      { $unwind: "$userDetails" },
+      ...BY_INTERVIEW_TENANT,
       {
         $match: {
           "userDetails.tenant_id": new mongoose.Types.ObjectId(tenant_id),
@@ -545,15 +511,7 @@ const getAllTenantsYesterdayAssignedStats = async (req, res, next) => {
     const { start: startOfYesterday, end: endOfYesterday } = istDayRange(null, -1);
 
     const getTenantWisePipeline = () => [
-      {
-        $lookup: {
-          from: "users",
-          localField: "roll_no",
-          foreignField: "roll_no",
-          as: "userDetails",
-        },
-      },
-      { $unwind: "$userDetails" },
+      ...BY_INTERVIEW_TENANT,
       {
         $match: {
           start_date_time: { $gte: startOfYesterday, $lte: endOfYesterday },
@@ -645,19 +603,11 @@ const getOverAllYesterdayAttemptedInterviewStats = async (req, res) => {
     const getTenantWisePipeline = () => [
       {
         $match: {
-          status: 0, // only attempted
+          ...ATTEMPTED,
           start_date_time: { $gte: startOfYesterday, $lte: endOfYesterday },
         },
       },
-      {
-        $lookup: {
-          from: "users",
-          localField: "roll_no",
-          foreignField: "roll_no",
-          as: "userDetails",
-        },
-      },
-      { $unwind: "$userDetails" },
+      ...BY_INTERVIEW_TENANT,
       {
         $group: {
           _id: "$userDetails.tenant_id",
@@ -745,7 +695,7 @@ const overallStats = async (req, res) => {
         $facet: {
           assigned: [{ $count: "count" }],
           attempted: [
-            { $match: { status: 0 } },
+            { $match: ATTEMPTED },
             { $count: "count" }
           ]
         }
@@ -764,22 +714,14 @@ const overallStats = async (req, res) => {
 
     // ---------- Tenant-wise stats ----------
     const commonPipeline = [
-      {
-        $lookup: {
-          from: "users",
-          localField: "roll_no",
-          foreignField: "roll_no",
-          as: "userDetails"
-        }
-      },
-      { $unwind: "$userDetails" },
+      ...BY_INTERVIEW_TENANT,
       {
         $group: {
           _id: "$userDetails.tenant_id",
           totalAssigned: { $sum: 1 },
           totalAttempted: {
             $sum: {
-              $cond: [{ $eq: ["$status", 0] }, 1, 0]
+              $cond: [ATTEMPTED_EXPR, 1, 0]
             }
           }
         }
@@ -840,15 +782,7 @@ const currentStats = async (req, res) => {
           start_date_time: { $gte: startOfToday, $lte: endOfToday },
         },
       },
-      {
-        $lookup: {
-          from: "users",
-          localField: "roll_no",
-          foreignField: "roll_no",
-          as: "userDetails",
-        },
-      },
-      { $unwind: "$userDetails" },
+      ...BY_INTERVIEW_TENANT,
       {
         $group: {
           _id: "$userDetails.tenant_id",
@@ -858,7 +792,7 @@ const currentStats = async (req, res) => {
 
           // attempted (status = 0)
           attempted_count: {
-            $sum: { $cond: [{ $eq: ["$status", 0] }, 1, 0] },
+            $sum: { $cond: [ATTEMPTED_EXPR, 1, 0] },
           },
 
           // upcoming today (current time < interview start time)
@@ -957,7 +891,7 @@ const getDaywiseStats = async (req, res, next) => {
       {
         $match: {
           start_date_time: {
-            $gte: istDayRange(null, -10).start
+            $gte: istDayRange(null, -9).start
           }
         }
       },
@@ -974,7 +908,7 @@ const getDaywiseStats = async (req, res, next) => {
           assigned_count: { $sum: 1 },
           attempted_count: {
             $sum: {
-              $cond: [{ $eq: ["$status", 0] }, 1, 0]
+              $cond: [ATTEMPTED_EXPR, 1, 0]
             }
           }
         }

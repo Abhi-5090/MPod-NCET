@@ -20,6 +20,7 @@ import { useParams, useNavigate } from "react-router-dom"
 import { toast } from "react-toastify";
 import { apiUrl, getErrorMessage } from "../../config/api";
 import { useAuth } from "../../context/AuthContext";
+import { questionCountError } from "./interviewHelpers";
 
 const levelOptions = [
   { label: "Easy", value: "easy" },
@@ -95,6 +96,11 @@ const EditCodingInterview = (props) => {
   const handleSubmit = async () => {
     if (!selectedPlatform || !rollNo.trim() || !selectedLevel || !startDate || !data.no_of_questions) {
       toast.warn("Please fill all required fields");
+      return;
+    }
+    const countError = questionCountError(data.no_of_questions, 1, 10);
+    if (countError) {
+      toast.warn(countError);
       return;
     }
     const dataList = {
@@ -175,7 +181,7 @@ const EditCodingInterview = (props) => {
                         placeholder="No. of Questions"
                         type="number"
                         min="1"
-                        max="30"
+                        max="10"
                         className="form-control"
                         id="validationCustom01"
                         onChange={handleChange}

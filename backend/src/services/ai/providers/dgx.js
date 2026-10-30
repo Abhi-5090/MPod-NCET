@@ -90,7 +90,7 @@ function create(cfg, deps = {}) {
   const endpoints = [...groups.values()].map((g) => {
     const modelHint =
       g.protocol === "ollama"
-        ? (m) => `On the ${who.label} run: ollama pull ${m}`
+        ? (m) => `On the Ollama server run: ollama pull ${m}`
         : (m) => `Serve "${m}" on the ${who.label} (for vLLM: --served-model-name ${m}).`;
     const adapter =
       g.protocol === "ollama"

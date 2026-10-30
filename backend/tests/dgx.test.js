@@ -42,12 +42,13 @@ describe("DGX Spark: Ollama protocol through the API-key gateway", () => {
     const seen = [];
     const fetchImpl = async (url, init) => {
       seen.push({ url, auth: init.headers.Authorization });
+      if (url.endsWith("/api/tags")) return jsonRes(200, { models: [{ name: "gpt-oss:120b" }] });
       if (url.endsWith("/api/show")) return jsonRes(200, { capabilities: ["completion"] });
       return jsonRes(200, { message: { content: '{"accuracy": 60}' }, done_reason: "stop" });
     };
     const p = dgx.create(cfg(), { fetchImpl });
     await p.chat({ task: "scoring", model: p.models.scoring, system: "s", user: "u", maxTokens: 10 });
-    expect(seen.map((s) => s.url)).toEqual(["https://ai.example.edu/api/show", "https://ai.example.edu/api/chat"]);
+    expect(seen.map((s) => s.url)).toEqual(["https://ai.example.edu/api/tags", "https://ai.example.edu/api/show", "https://ai.example.edu/api/chat"]);
     expect(seen.every((s) => s.auth === "Bearer key-123")).toBe(true);
   });
 
@@ -55,7 +56,7 @@ describe("DGX Spark: Ollama protocol through the API-key gateway", () => {
     const p = dgx.create(cfg(), { fetchImpl: async () => jsonRes(401, { error: "unauthorized" }) });
     const err = await p.chat({ task: "scoring", model: p.models.scoring, system: "s", user: "u", maxTokens: 10, interactive: true }).catch((e) => e);
     expect(err).toMatchObject({ provider: "dgx", reason: "auth", outage: true });
-    expect(err.message).toMatch(/DGX Spark rejected the API key/);
+    expect(err.message).toMatch(/Ollama rejected the API key/);
     expect(err.hint).toMatch(/DGX_API_KEY/);
   });
 });

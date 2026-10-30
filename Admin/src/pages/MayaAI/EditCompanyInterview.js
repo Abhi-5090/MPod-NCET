@@ -20,6 +20,7 @@ import { useParams, useNavigate } from "react-router-dom"
 import { toast } from "react-toastify";
 import { apiUrl, getErrorMessage } from "../../config/api";
 import { useAuth } from "../../context/AuthContext";
+import { isActiveOption, questionCountError } from "./interviewHelpers";
 
 const roundOptions = [
   { label: "TR1", value: "TR1" },
@@ -52,6 +53,8 @@ const EditCompanyInterview = (props) => {
   const [selectedType, setSelectedType] = useState(null);
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [selectedPlatform, setSelectedPlatform] = useState(null);
+  const [tags, setTags] = useState([]);
+  const [selectedTag, setSelectedTag] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -68,10 +71,18 @@ const EditCompanyInterview = (props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Companies list and interview details are loaded together so the selected
-  // companies can be mapped to labels.
+  // Companies list, tags list and interview details are loaded together so the
+  // selected companies and tag can be mapped to labels.
   const loadData = async () => {
     let companyList = [];
+    let tagList = [];
+    try {
+      const response = await axios.get(apiUrl('tags-list'));
+      tagList = Array.isArray(response.data?.tags) ? response.data.tags : [];
+      setTags(tagList);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Failed to load tags."));
+    }
     try {
       const response = await axios.get(apiUrl('companies-list'));
       companyList = Array.isArray(response.data) ? response.data : [];
@@ -96,6 +107,12 @@ const EditCompanyInterview = (props) => {
       setSelectedPlatform(
         platformOptions.find(option => option.value === interviewDetails.platform) || null
       );
+      const rawTag = interviewDetails.tag;
+      const tagId = rawTag && typeof rawTag === "object" ? rawTag._id : rawTag;
+      const tag = tagId ? tagList.find(t => String(t._id) === String(tagId)) : null;
+      setSelectedTag(
+        tag ? { label: tag.tag_name, value: tag._id } : tagId ? { label: String(tagId), value: tagId } : null
+      );
       setStartDate(interviewDetails.start_date_time || null);
       setData({ no_of_questions: interviewDetails.questions_count || "" });
     } catch (err) {
@@ -103,9 +120,13 @@ const EditCompanyInterview = (props) => {
     }
   };
 
-  const companyOptions = companies.map(company => ({
+  const companyOptions = companies.filter(isActiveOption).map(company => ({
     label: company.company_name,
     value: company._id
+  }));
+  const tagOptions = tags.map(tag => ({
+    label: tag.tag_name,
+    value: tag._id
   }));
 
   const handleChange = (e) => {
@@ -132,6 +153,12 @@ const EditCompanyInterview = (props) => {
       return;
     }
 
+    const countError = questionCountError(data.no_of_questions, 1, 30);
+    if (countError) {
+      toast.warn(countError);
+      return;
+    }
+
     const dataList = {
       platform: selectedPlatform.value,
       company: selectedCompany.map(item => item.value),
@@ -139,6 +166,7 @@ const EditCompanyInterview = (props) => {
       round: selectedRound.map(item => item.value),
       start_date_time: new Date(startDate).toISOString(),
       type: selectedType.map(item => item.value),
+      tag: selectedTag ? selectedTag.value : null,
       questions_count: data.no_of_questions,
       created_by: user.roll_no
     };
@@ -216,6 +244,16 @@ const EditCompanyInterview = (props) => {
                       options={roundOptions}
                       classNamePrefix="select2-selection"
                       isMulti
+                    />
+                  </Col>
+                  <Col md="6">
+                    <Label>Select Tag</Label>
+                    <Select
+                      value={selectedTag}
+                      onChange={setSelectedTag}
+                      options={tagOptions}
+                      classNamePrefix="select2-selection"
+                      isClearable
                     />
                   </Col>
 

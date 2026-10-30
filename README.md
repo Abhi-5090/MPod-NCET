@@ -112,7 +112,7 @@ For the production setup (application on AWS, all models on the NVIDIA DGX Spark
 
 ## AI providers
 
-All AI calls go through one gateway (`backend/src/services/ai/`):
+All AI calls go through one gateway (`backend/src/services/ai/`). **Ollama is primary and OpenAI is the backup:** with `OLLAMA_URL` and `OLLAMA_MODEL` set (e.g. `http://127.0.0.1:7002` and `llama3.1:8b`), every AI task goes to Ollama. When Ollama doesn't answer (down, too slow, model missing), each request goes to OpenAI if `OPENAI_API_KEY` is set. A missing task model falls back to `OLLAMA_MODEL`, and a name without a tag matches the installed tag.
 
 | Setting | Meaning |
 |---|---|

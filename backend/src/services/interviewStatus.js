@@ -1,3 +1,4 @@
+const env = require("../config/env");
 // Human-readable status for interview lists (admin), combining schedule and evaluation state.
 function listStatus(row, now = Date.now()) {
   const ev = row.evaluation_status;
@@ -5,7 +6,7 @@ function listStatus(row, now = Date.now()) {
   if (ev === "failed") return "Evaluation failed";
   if (ev === "pending" || ev === "processing") return row.evaluation_waiting_for_ai ? "Waiting for AI" : "Evaluating";
   if (row.attempt && row.attempt.started_at) return "In progress";
-  if (new Date(row.start_date_time).getTime() < now - 5 * 60000) return "Expired";
+  if (new Date(row.start_date_time).getTime() < now - env.startGraceMinutes * 60000) return "Expired";
   return "Upcoming";
 }
 

@@ -30,6 +30,7 @@ function fakeOllama({ installed = Object.keys(CAPS), reply = () => ({ accuracy: 
     calls.push({ path, body });
     if (down) throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } });
     if (path === "/api/version") return jsonRes(200, { version: "0.12.0" });
+    if (path === "/api/tags") return jsonRes(200, { models: installed.map((name) => ({ name })) });
     if (path === "/api/ps") return jsonRes(200, { models: [] });
     if (path === "/api/show") {
       if (!installed.includes(body.model)) return jsonRes(404, { error: `model '${body.model}' not found` });
@@ -203,7 +204,7 @@ describe("AI gateway", () => {
 
     const st = aiStatus.getStatus();
     expect(st).toMatchObject({ available: true, degraded: true, provider: "dgx", serving: "openai", fallback: "openai" });
-    expect(st.message).toMatch(/DGX Spark: Cannot reach DGX Spark/);
+    expect(st.message).toMatch(/Ollama: Cannot reach Ollama/);
 
     const before = fake.calls.length;
     await ai.chatJson("summary", { system: "s", user: "u" });
@@ -221,15 +222,22 @@ describe("AI gateway", () => {
     expect(st.hint).toMatch(/systemctl status ollama/);
   });
 
-  test("a bad answer from one request does not fail over or mark the provider down", async () => {
+  test("an unusable answer goes to the backup provider without marking Ollama down", async () => {
     const fake = fakeOllama({ reply: () => "this is not json" });
     setup("dgx", "openai", fake);
+    const data = await ai.chatJson("scoring", { system: "s", user: "u" });
+    expect(data.accuracy).toBe(55); // answered by OpenAI
+    expect(chatCalls(fake.calls)).toHaveLength(2); // Ollama was retried once first
+    expect(openaiCalls).toHaveLength(1);
+    expect(aiStatus.getStatus().degraded).toBe(false);
+  });
+
+  test("without a backup an unusable answer is an error for that request only", async () => {
+    setup("dgx", "none", fakeOllama({ reply: () => "this is not json" }));
     const err = await ai.chatJson("scoring", { system: "s", user: "u" }).catch((e) => e);
     expect(err.reason).toBe("bad_response");
     expect(aiStatus.isOutage(err)).toBe(false);
-    expect(chatCalls(fake.calls)).toHaveLength(2); // retried once
-    expect(openaiCalls).toHaveLength(0);
-    expect(aiStatus.getStatus().degraded).toBe(false);
+    expect(aiStatus.getStatus().available).toBe(true);
   });
 
   test("reasoning text and prose around the JSON are tolerated", async () => {
@@ -285,7 +293,7 @@ describe("AI gateway", () => {
     expect(chatCalls(fake.calls).length).toBe(before); // missing model skipped during the cool-down
     const st = aiStatus.getStatus();
     expect(st).toMatchObject({ available: true, degraded: true, partial: true, serving: "dgx", reason: "model_missing" });
-    expect(st.hint).toBe(`On the DGX Spark run: ollama pull ${env.ai.dgx.models.scoring}`);
+    expect(st.hint).toBe(`On the Ollama server run: ollama pull ${env.ai.dgx.models.scoring}`);
     expect(st.providers[0].missing_models).toEqual([env.ai.dgx.models.scoring]);
   });
 

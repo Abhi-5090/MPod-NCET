@@ -25,6 +25,10 @@ const dgxVar = (name) => {
   const v = process.env[`DGX_${name}`];
   return v != null && v !== "" ? v : process.env[`OLLAMA_${name}`];
 };
+// Ollama address: DGX_BASE_URL, or the plain OLLAMA_URL / OLLAMA_BASE_URL names.
+const ollamaUrl = () => dgxVar("BASE_URL") || (process.env.OLLAMA_URL || "").trim() || null;
+// One model for every task (OLLAMA_MODEL / DGX_MODEL); per-task settings win over it.
+const ollamaDefaultModel = () => (dgxVar("MODEL") || "").trim() || null;
 const lower = (v, dflt) => String(v == null || String(v).trim() === "" ? dflt : v).trim().toLowerCase();
 // "ollama" is the old name of the self-hosted provider.
 const providerName = (v, dflt) => {
@@ -74,8 +78,13 @@ const env = {
   // the primary is unavailable. Each task (scoring, generation, summary, coding) uses its
   // own model. Without AI_PROVIDER, "dgx" is used when DGX_BASE_URL is set.
   ai: {
-    provider: providerName(process.env.AI_PROVIDER, dgxVar("BASE_URL") ? "dgx" : "openai"),
-    fallback: providerName(process.env.AI_FALLBACK_PROVIDER, "none"),
+    // Ollama is primary whenever its address is configured.
+    provider: providerName(process.env.AI_PROVIDER, ollamaUrl() ? "dgx" : "openai"),
+    // When Ollama is primary and an OpenAI key exists, OpenAI takes over if Ollama doesn't answer.
+    fallback: providerName(
+      process.env.AI_FALLBACK_PROVIDER,
+      providerName(process.env.AI_PROVIDER, ollamaUrl() ? "dgx" : "openai") === "dgx" && (process.env.OPENAI_API_KEY || "").trim() ? "openai" : "none"
+    ),
     healthCheckMinutes: int(process.env.AI_HEALTH_CHECK_MINUTES, 10),
     openai: {
       apiKey: (process.env.OPENAI_API_KEY || "").trim(),
@@ -93,9 +102,9 @@ const env = {
     },
     // Self-hosted models on the DGX Spark (see services/ai/providers/dgx.js).
     dgx: {
-      label: dgxVar("LABEL") || "DGX Spark",
+      label: dgxVar("LABEL") || "Ollama",
       // Public HTTPS address of the DGX Spark API gateway (or http://127.0.0.1:11434 on the Spark itself).
-      baseURL: (dgxVar("BASE_URL") || "http://127.0.0.1:11434").trim().replace(/\/+$/, ""),
+      baseURL: (ollamaUrl() || "http://127.0.0.1:11434").trim().replace(/\/+$/, ""),
       apiKey: (dgxVar("API_KEY") || "").trim(),
       // ollama = Ollama native API; openai = OpenAI-compatible API (vLLM, TensorRT-LLM, SGLang)
       protocol: lower(dgxVar("PROTOCOL"), "ollama"),
@@ -117,8 +126,9 @@ const env = {
       allowInsecure: bool(dgxVar("ALLOW_INSECURE"), false),
       isProd,
       // Self-hosted models are slower than the hosted API, and a cold model takes time to load.
-      timeoutMs: int(dgxVar("TIMEOUT_MS"), 5 * 60 * 1000),
-      interactiveTimeoutMs: int(dgxVar("INTERACTIVE_TIMEOUT_MS"), 90 * 1000),
+      // An Ollama that doesn't answer in time counts as down, and the request goes to OpenAI.
+      timeoutMs: int(dgxVar("TIMEOUT_MS"), 3 * 60 * 1000),
+      interactiveTimeoutMs: int(dgxVar("INTERACTIVE_TIMEOUT_MS"), 60 * 1000),
       // Requests sent to the DGX at once; keep at or below its OLLAMA_NUM_PARALLEL / vLLM capacity.
       maxConcurrent: int(dgxVar("MAX_CONCURRENCY"), 4),
       numCtx: int(dgxVar("NUM_CTX"), 8192),
@@ -129,11 +139,13 @@ const env = {
       reasoningTokens: int(dgxVar("REASONING_TOKENS"), 2048),
       preload: bool(dgxVar("PRELOAD"), isProd),
       models: {
-        scoring: dgxVar("SCORING_MODEL") || "gpt-oss:120b",
-        generation: dgxVar("GENERATION_MODEL") || "gpt-oss:20b",
-        summary: dgxVar("SUMMARY_MODEL") || "gpt-oss:20b",
-        coding: dgxVar("CODING_MODEL") || "qwen3-coder:30b",
+        scoring: dgxVar("SCORING_MODEL") || ollamaDefaultModel() || "gpt-oss:120b",
+        generation: dgxVar("GENERATION_MODEL") || ollamaDefaultModel() || "gpt-oss:20b",
+        summary: dgxVar("SUMMARY_MODEL") || ollamaDefaultModel() || "gpt-oss:20b",
+        coding: dgxVar("CODING_MODEL") || ollamaDefaultModel() || "qwen3-coder:30b",
       },
+      // Used when a task's model isn't installed on the Ollama server (like ollama_client.py).
+      defaultModel: ollamaDefaultModel(),
     },
     // Camera analysis model (face detection, 68 landmarks, 7 expressions) served on the
     // DGX Spark. Without DGX_VISION_URL the student's browser runs the model itself.

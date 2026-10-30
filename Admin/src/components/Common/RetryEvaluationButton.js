@@ -6,13 +6,14 @@ import { toast } from "react-toastify"
 import { apiUrl, getErrorMessage } from "../../config/api"
 
 // Re-queues the AI scoring of a submitted interview (failed or waiting for the AI).
-const RetryEvaluationButton = ({ interviewId, interviewType, title, label }) => {
+const RetryEvaluationButton = ({ interviewId, interviewType, title, label, onDone }) => {
   const [busy, setBusy] = useState(false)
   const retry = async () => {
     setBusy(true)
     try {
       await axios.post(apiUrl("interview-session/retry-evaluation"), { interview_id: interviewId, interview_type: interviewType })
       toast.success("Evaluation queued. Refresh the list in a minute to see the result.")
+      if (onDone) onDone()
     } catch (err) {
       toast.error(getErrorMessage(err, "Could not retry the evaluation."))
     } finally {
@@ -31,6 +32,7 @@ RetryEvaluationButton.propTypes = {
   interviewType: PropTypes.string.isRequired,
   title: PropTypes.string,
   label: PropTypes.string,
+  onDone: PropTypes.func,
 }
 
 export default RetryEvaluationButton

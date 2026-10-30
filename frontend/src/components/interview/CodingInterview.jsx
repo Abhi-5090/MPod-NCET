@@ -46,14 +46,24 @@ function CodingInterview({ session, client, onFinish }) {
   const [index, setIndex] = useState(firstOpen === -1 ? questions.length - 1 : firstOpen);
   const question = questions[index];
   const saved = savedById[question.id] || {};
+  const offset = Number(session.clock_offset) || 0; // server clock offset, measured once at start
 
-  const initialStage = (s) => (s.optimized_answer ? "optimize" : s.matched_accuracy >= IDEA_PASS ? "code" : "idea");
+  // Code already saved means the idea step was passed, skipped (AI unavailable) or exhausted.
+  const initialStage = (s) =>
+    s.optimized_answer ? "optimize" : s.matched_accuracy >= IDEA_PASS || s.answer ? "code" : "idea";
+  // Per-problem time, capped at what is left of the overall server time (matters on resume).
+  const problemSeconds = (q) => {
+    const full = (Number(q.time) || 15) * 60;
+    if (!session.deadline_at) return full;
+    const left = Math.floor((new Date(session.deadline_at).getTime() - (Date.now() + offset)) / 1000);
+    return Number.isFinite(left) ? Math.max(0, Math.min(full, left)) : full;
+  };
   const [stage, setStage] = useState(initialStage(saved));
   const [idea, setIdea] = useState(saved.idea || "");
   const [code, setCode] = useState(saved.answer || "");
   const [optimized, setOptimized] = useState(saved.optimized_answer || "");
   const [ideaInfo, setIdeaInfo] = useState({ checking: false, message: "", attemptsLeft: null });
-  const [timer, setTimer] = useState((Number(question.time) || 15) * 60);
+  const [timer, setTimer] = useState(() => problemSeconds(question));
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [fatal, setFatal] = useState("");
@@ -69,6 +79,8 @@ function CodingInterview({ session, client, onFinish }) {
   onFinishRef.current = onFinish;
   const faceRef = useRef(face);
   faceRef.current = face;
+  const questionIdRef = useRef(question.id);
+  questionIdRef.current = question.id;
 
   // final=true marks that the student moved past this problem (used for resume and
   // so that a late autosave can never overwrite it).
@@ -85,6 +97,8 @@ function CodingInterview({ session, client, onFinish }) {
       }),
     [client, question.id]
   );
+  const saveRef = useRef(save);
+  saveRef.current = save;
 
   const finishAll = useCallback(() => {
     if (finished.current) return;
@@ -110,6 +124,9 @@ function CodingInterview({ session, client, onFinish }) {
         return;
       }
       if (status && status < 500 && status !== 429) {
+        // e.g. 401 after a resume elsewhere: stop so the deadline does not submit (it would always fail).
+        finished.current = true;
+        faceRef.current.stop();
         setFatal(errorMessage(err, "This interview session is no longer valid. Please restart the interview from your dashboard."));
         return;
       }
@@ -133,7 +150,7 @@ function CodingInterview({ session, client, onFinish }) {
     setCode(s.answer || "");
     setOptimized(s.optimized_answer || "");
     setIdeaInfo({ checking: false, message: "", attemptsLeft: null });
-    setTimer((Number(nextQ.time) || 15) * 60);
+    setTimer(problemSeconds(nextQ));
     startedAt.current = Date.now();
     setNotice("");
   }, [save, index, questions, savedById, finishAll]);
@@ -151,19 +168,23 @@ function CodingInterview({ session, client, onFinish }) {
     return () => clearTimeout(t);
   }, [timer, paused]);
 
-  // Overall server deadline.
+  // Every problem was already completed (resume after the last one): just submit.
+  useEffect(() => {
+    if (firstOpen === -1) finishAll();
+  }, [firstOpen, finishAll]);
+
+  // Overall server deadline (save is read through a ref so this never restarts per problem).
   useEffect(() => {
     if (!session.deadline_at) return undefined;
-    const skew = new Date(session.server_time).getTime() - Date.now();
     const t = setInterval(() => {
       if (finished.current || advancing.current) return;
-      if (new Date(session.deadline_at).getTime() - (Date.now() + skew) <= 0) {
+      if (new Date(session.deadline_at).getTime() - (Date.now() + offset) <= 0) {
         advancing.current = true;
-        save({ final: true }).finally(finishAll);
+        saveRef.current({ final: true }).finally(finishAll);
       }
     }, 1000);
     return () => clearInterval(t);
-  }, [session.deadline_at, session.server_time, save, finishAll]);
+  }, [session.deadline_at, offset, finishAll]);
 
   useEffect(() => {
     if (paused) return undefined;
@@ -179,17 +200,23 @@ function CodingInterview({ session, client, onFinish }) {
       return;
     }
     setIdeaInfo((x) => ({ ...x, checking: true, message: "" }));
+    const qid = question.id;
+    // The timer or Next may move to another problem while a request is in flight.
+    const moved = () => questionIdRef.current !== qid || finished.current;
     try {
-      const { data } = await client.analyzeIdea(question.id, idea.trim());
+      const { data } = await client.analyzeIdea(qid, idea.trim());
+      if (moved()) return;
       if (data.unavailable) {
         // AI is down: the idea check is skipped so the interview can continue.
         await save();
+        if (moved()) return;
         setStage("code");
         setIdeaInfo({ checking: false, message: data.message || "Idea check is unavailable right now. Continue with your code.", attemptsLeft: null });
         return;
       }
       if (data.accuracy >= IDEA_PASS) {
         await save();
+        if (moved()) return;
         setStage("code");
         setIdeaInfo({ checking: false, message: "", attemptsLeft: data.attempts_left });
       } else {
@@ -204,6 +231,7 @@ function CodingInterview({ session, client, onFinish }) {
         if (data.attempts_left === 0) setStage("code");
       }
     } catch (err) {
+      if (moved()) return;
       const status = err && err.response && err.response.status;
       if (status === 429) {
         setStage("code");
@@ -221,7 +249,9 @@ function CodingInterview({ session, client, onFinish }) {
     }
     setNotice("");
     if (!optimized) setOptimized(code);
+    const qid = question.id;
     await save();
+    if (questionIdRef.current !== qid || finished.current) return;
     setStage("optimize");
   };
 

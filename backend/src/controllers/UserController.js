@@ -1,3 +1,4 @@
+const env = require("../config/env");
 const path = require("path");
 const fs = require("fs");
 const bcrypt = require("bcryptjs");
@@ -392,7 +393,7 @@ const deleteUser = asyncHandler(async (req, res) => {
 const getAssignedInterviews = async (req, res, next) => {
   const roll_no = ownRollNo(req, req.params.id);
   const nowUTC = new Date();
-  const pastTimeUTC = new Date(nowUTC.getTime() - 5 * 60000);
+  const pastTimeUTC = new Date(nowUTC.getTime() - env.startGraceMinutes * 60000);
 
   try {
     const commonPipeline = [
@@ -409,7 +410,9 @@ const getAssignedInterviews = async (req, res, next) => {
         $match: {
           $or: [
             { start_date_time: { $gte: pastTimeUTC } },
-            { "attempt.deadline_at": { $gt: nowUTC } }
+            { "attempt.deadline_at": { $gt: nowUTC } },
+            // questions failed to prepare: the student may retry for 15 minutes
+            { "attempt.generation_failed_at": { $gt: new Date(nowUTC.getTime() - 15 * 60000) } }
           ]
         }
       },
@@ -488,7 +491,7 @@ const getAssignedInterviews = async (req, res, next) => {
 const getTraineePastInterviews = async (req, res, next) => {
   const roll_no = ownRollNo(req, req.params.id);
     const nowUTC = new Date();
-  const pastTimeUTC = new Date(nowUTC.getTime() - 5 * 60000);
+  const pastTimeUTC = new Date(nowUTC.getTime() - env.startGraceMinutes * 60000);
   try {
     const commonPipeline = [
       {
@@ -682,7 +685,9 @@ const getInterviewDetailsById = async (req, res, next) => {
           $match: {
             _id: new mongoose.Types.ObjectId(id),
             platform: platform,
-            roll_no: roll_no
+            roll_no: roll_no,
+            // this college only (roll numbers repeat across colleges)
+            $or: [{ tenant_id: req.auth.tenantId }, { tenant_id: { $exists: false } }],
           }
         },
         {
@@ -776,7 +781,9 @@ const getInterviewDetailsById = async (req, res, next) => {
           $match: {
             _id: new mongoose.Types.ObjectId(id),
             platform: platform,
-            roll_no: roll_no
+            roll_no: roll_no,
+            // this college only (roll numbers repeat across colleges)
+            $or: [{ tenant_id: req.auth.tenantId }, { tenant_id: { $exists: false } }],
           }
         },
         {
@@ -838,7 +845,9 @@ const getInterviewDetailsById = async (req, res, next) => {
           $match: {
             _id: new mongoose.Types.ObjectId(id),
             platform: platform,
-            roll_no: roll_no
+            roll_no: roll_no,
+            // this college only (roll numbers repeat across colleges)
+            $or: [{ tenant_id: req.auth.tenantId }, { tenant_id: { $exists: false } }],
           }
         },
         {
@@ -1022,7 +1031,8 @@ const overallAccuracy = async (req, res, next) => {
       ]);
       
 
-      return accuracy.length > 0 ? Math.ceil(accuracy[0].overallAvgAccuracy) : 0;
+      // null = the student has no evaluated interviews of this type
+      return accuracy.length > 0 && accuracy[0].overallAvgAccuracy != null ? Math.ceil(accuracy[0].overallAvgAccuracy) : null;
     };
 
     const [technologyAvg, codingAvg, companyAvg] = await Promise.all([
@@ -1031,14 +1041,14 @@ const overallAccuracy = async (req, res, next) => {
       getAccuracies(CompanyInterview)
     ]);
 
-    const overallAvgAccuracy = Math.ceil(
-      (technologyAvg + codingAvg + companyAvg) / 3
-    );
+    // Average only the interview types the student has taken.
+    const taken = [technologyAvg, codingAvg, companyAvg].filter((v) => v !== null);
+    const overallAvgAccuracy = taken.length ? Math.ceil(taken.reduce((a, b) => a + b, 0) / taken.length) : 0;
 
     const accuracyData = [
-      { label: "Technology", value: technologyAvg, color: "#4caf50" },
-      { label: "Company", value: companyAvg, color: "#ff9800" },
-      { label: "Coding", value: codingAvg, color: "#2196f3" }
+      { label: "Technology", value: technologyAvg ?? 0, color: "#4caf50" },
+      { label: "Company", value: companyAvg ?? 0, color: "#ff9800" },
+      { label: "Coding", value: codingAvg ?? 0, color: "#2196f3" }
     ];
 
     return res.json({

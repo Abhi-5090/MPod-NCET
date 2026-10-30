@@ -219,21 +219,31 @@ const TotalSuperAdminStats = () => {
                                     </thead>
 
                                     <tbody className="text-center">
-                                        {asArray(overallStats.tenantwise.tenantWiseTechstats).map((tenant) => {
-                                            const coding = asArray(overallStats.tenantwise.tenantWiseCodingstats).find(
-                                                t => t.tenant_id === tenant.tenant_id
+                                        {(() => {
+                                            // Rows come from every tenant present in any of the three arrays.
+                                            const techStats = asArray(overallStats.tenantwise.tenantWiseTechstats);
+                                            const codingStats = asArray(overallStats.tenantwise.tenantWiseCodingstats);
+                                            const companyStats = asArray(overallStats.tenantwise.tenantWiseCompanystats);
+                                            const tenantIds = [];
+                                            [techStats, codingStats, companyStats].forEach(arr =>
+                                                arr.forEach(t => {
+                                                    if (!tenantIds.some(tid => String(tid) === String(t.tenant_id))) tenantIds.push(t.tenant_id);
+                                                })
                                             );
-                                            const company = asArray(overallStats.tenantwise.tenantWiseCompanystats).find(
-                                                t => t.tenant_id === tenant.tenant_id
-                                            );
+                                            const findTenant = (arr, tenantId) => arr.find(t => String(t.tenant_id) === String(tenantId));
+                                            return tenantIds.map((tenantId) => {
+                                            const tech = findTenant(techStats, tenantId);
+                                            const coding = findTenant(codingStats, tenantId);
+                                            const company = findTenant(companyStats, tenantId);
+                                            const tenantName = (tech || coding || company)?.tenant_name;
 
                                             return (
-                                                <tr key={tenant.tenant_id}>
-                                                    <td className="fw-bold">{tenant.tenant_name}</td>
+                                                <tr key={String(tenantId)}>
+                                                    <td className="fw-bold">{tenantName}</td>
 
                                                     {/* Technology */}
-                                                    <td>{tenant.totalAssigned}</td>
-                                                    <td className="text-primary fw-bold">{tenant.totalAttempted}</td>
+                                                    <td>{tech?.totalAssigned || 0}</td>
+                                                    <td className="text-primary fw-bold">{tech?.totalAttempted || 0}</td>
 
                                                     {/* Coding */}
                                                     <td>{coding?.totalAssigned || 0}</td>
@@ -244,7 +254,8 @@ const TotalSuperAdminStats = () => {
                                                     <td className="text-danger fw-bold">{company?.totalAttempted || 0}</td>
                                                 </tr>
                                             );
-                                        })}
+                                            });
+                                        })()}
                                     </tbody>
                                 </Table>
                             </Col>

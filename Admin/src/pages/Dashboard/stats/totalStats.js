@@ -177,7 +177,7 @@ const TotalStats = (props) => {
                   <Col md={6}>
                     <p style={styles.problemsText}>Users</p>
                     <h6 style={styles.problemsCount}>
-                      {renderTotal(userStats, ["male", "female"])}
+                      {userStats && userStats.total != null ? userStats.total : renderTotal(userStats, ["male", "female"])}
                     </h6>
                   </Col>
                 </Row>

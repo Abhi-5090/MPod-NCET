@@ -78,7 +78,7 @@ async function callJson(p, task, model, opts) {
   for (let attempt = 0; ; attempt++) {
     // eslint-disable-next-line no-await-in-loop
     const out = await limiters[p.name].run(() => p.chat({ task, model, ...opts }), { interactive: opts.interactive });
-    recordUsage(p.name, model, out.usage);
+    recordUsage(p.name, out.model || model, out.usage);
     try {
       return parseJson(out.content);
     } catch (err) {
@@ -123,11 +123,15 @@ async function chatJson(task, { system, user, maxTokens = 1024, temperature = 0.
       return data;
     } catch (err) {
       const e = err instanceof AiError ? err : p.toAiError ? p.toAiError(err) : new AiError(err.message, { provider: p.name, cause: err });
-      if (!e.outage) throw e;
-      aiStatus.recordFailure(e, p.name, model);
-      lastErr = e;
       const next = providers[tryList[i + 1]];
-      if (next && !env.isTest) console.warn(`[ai] ${p.label} unavailable (${e.message}); using ${next.label} for this request.`);
+      // Unusable output (bad/cut-off JSON even after a retry) also goes to the next provider,
+      // but says nothing about the provider's health, so it isn't recorded as an outage.
+      if (!e.outage && !(e.reason === "bad_response" && next)) throw e;
+      if (e.outage) aiStatus.recordFailure(e, p.name, model);
+      lastErr = e;
+      if (next && !env.isTest) {
+        console.warn(`[ai] ${p.label} ${e.outage ? "unavailable" : "gave an unusable answer"} (${e.message}); using ${next.label} for this request.`);
+      }
     }
   }
   throw lastErr;

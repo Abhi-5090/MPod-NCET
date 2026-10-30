@@ -16,8 +16,10 @@ import {
   attemptedPercentage,
   deleteResultMessage,
   getTodayDateString,
-  studentReportUrl, statusColor, canRetryEvaluation } from "./interviewHelpers";
+  studentReportUrl, statusColor, canRetryEvaluation, canDeleteInterview } from "./interviewHelpers";
 import "./datatables.scss";
+
+const joinList = (value) => (Array.isArray(value) ? value.join(", ") : value || "");
 
 // map raw interviews to table rows
 const mapToRows = (arr) =>
@@ -31,6 +33,8 @@ const mapToRows = (arr) =>
     questions_count: interview.questions_count,
     start_date_time: interview.start_date_time_ist || interview.start_date_time,
     interview_status: interview.interview_status,
+    provisional: interview.provisional,
+    evaluation_error: interview.evaluation_error,
     _id: interview._id,
   }));
 
@@ -113,6 +117,8 @@ const CompanyInterviewsList = (props) => {
   const attemptedCount = interviewsData.filter((i) => i.interview_status === "Attempted").length;
   const expiredCount = interviewsData.filter((i) => i.interview_status === "Expired").length;
 
+  const refetch = () => fetchInterviewsData(filterDate || getTodayDateString());
+
   const confirmDeleteInterview = async () => {
     setDeleting(true);
     try {
@@ -133,8 +139,8 @@ const CompanyInterviewsList = (props) => {
     { dataField: "roll_no", text: "Roll no", sort: true },
     { dataField: "first_name", text: "Name", sort: true },
     { dataField: "gender", text: "Gender", sort: true },
-    { dataField: "type", text: "Type", sort: true },
-    { dataField: "round", text: "Round", sort: true },
+    { dataField: "type", text: "Type", sort: true, formatter: joinList },
+    { dataField: "round", text: "Round", sort: true, formatter: joinList },
     { dataField: "questions_count", text: "No of Questions", sort: true },
     { dataField: "start_date_time", text: "Start Date & Time", sort: true },
     {
@@ -168,7 +174,7 @@ const CompanyInterviewsList = (props) => {
             View
           </a>
             {interview.provisional && (
-              <RetryEvaluationButton interviewId={interview._id} interviewType="company" label="Re-score with AI" title="Replace the provisional score with the AI evaluation" />
+              <RetryEvaluationButton interviewId={interview._id} interviewType="company" label="Re-score with AI" title="Replace the provisional score with the AI evaluation" onDone={refetch} />
             )}
           </>
         ) : (
@@ -179,11 +185,13 @@ const CompanyInterviewsList = (props) => {
               </Link>
             )}
             {canRetryEvaluation(interview.interview_status) && (
-              <RetryEvaluationButton interviewId={interview._id} interviewType="company" title={interview.evaluation_error || ""} />
+              <RetryEvaluationButton interviewId={interview._id} interviewType="company" title={interview.evaluation_error || ""} onDone={refetch} />
             )}
-            <Button color="danger" size="sm" onClick={() => setSelectedInterviewId(interview._id)}>
-              Delete
-            </Button>
+            {canDeleteInterview(interview.interview_status) && (
+              <Button color="danger" size="sm" onClick={() => setSelectedInterviewId(interview._id)}>
+                Delete
+              </Button>
+            )}
           </>
         ),
     },
@@ -320,7 +328,7 @@ const CompanyInterviewsList = (props) => {
                 error={error}
                 empty={!tenantId || !filteredRows.length}
                 emptyText={tenantId ? "No interviews found for selected date." : "Select a college"}
-                onRetry={() => fetchInterviewsData(filterDate || getTodayDateString())}
+                onRetry={refetch}
               >
                 <BootstrapTable
                   bootstrap4

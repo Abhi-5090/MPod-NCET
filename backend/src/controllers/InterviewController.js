@@ -30,12 +30,12 @@ const deleteInterviewDetails = async (req, res) => {
 };
 
 const getAllInterviewDetails = async (req, res) => {
+  const { start: startOfDay, end: endOfDay } = istDayRange(req.query.date ? String(req.query.date) : null, 0);
   try {
     const tenant_id = new mongoose.Types.ObjectId(req.params.id); // scoped by route middleware
 
     // date query param format expected: YYYY-MM-DD (e.g., 2025-12-03)
-    // The requested calendar day (or yesterday) in India, whatever the server's timezone.
-    const { start: startOfDay, end: endOfDay } = istDayRange(req.query.date ? String(req.query.date) : null, -1);
+    // The requested calendar day (default today) in India, whatever the server's timezone.
 
     const InterviewDetails = await Interview.aggregate([
       // match interviews whose start_date_time falls within the target day
@@ -52,6 +52,8 @@ const getAllInterviewDetails = async (req, res) => {
           localField: "roll_no",
           foreignField: "roll_no",
           as: "userDetails",
+          // only this college's student (roll numbers repeat across colleges)
+          pipeline: [{ $match: { tenant_id: tenant_id } }, { $project: { first_name: 1, gender: 1, tenant_id: 1 } }],
         },
       },
       // ensure user belongs to tenant

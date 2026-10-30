@@ -31,8 +31,9 @@ const ALL_MODELS = [Interview, CompanyInterview, CodingInterview];
  */
 async function tenantOfInterview(doc) {
   if (doc.tenant_id) return doc.tenant_id;
-  const u = await User.findOne({ roll_no: doc.roll_no }).select("tenant_id").lean();
-  return u ? u.tenant_id : null;
+  // Roll numbers repeat across colleges: only an unambiguous match counts.
+  const tenants = await User.distinct("tenant_id", { roll_no: doc.roll_no });
+  return tenants.length === 1 ? tenants[0] : null;
 }
 
 /**

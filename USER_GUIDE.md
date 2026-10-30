@@ -138,9 +138,9 @@ Go to **Interviews**, then the list for the interview type, then **Add**:
 
 | Type | You choose |
 |---|---|
-| Technology | Technology, modules, topics, level, number of questions |
-| Company | Companies, type (Service Based / Product Based), rounds, tag (optional), number of questions. **Available Questions** shows how many bank questions match; it must be at least the number you ask for. |
-| Coding | Level and number of problems |
+| Technology | Technology, modules, topics (leave empty to cover all topics of the chosen modules), level, number of questions (1–10) |
+| Company | Companies, type (Service Based / Product Based), rounds, tag (optional), number of questions (1–30). **Available Questions** shows how many bank questions match. If it is 0 the interview can't be scheduled and no credit is used; if it is below the number you ask for, you're warned and the student gets fewer questions. |
+| Coding | Level: Easy, Medium, Hard, or Any (problems of any level). A level with no problems can't be scheduled. |
 
 For every type, you also choose:
 - **Platform**: **web** (student website) or **mpod** (campus kiosk)
@@ -150,7 +150,8 @@ For every type, you also choose:
 What happens when you schedule:
 - **One credit** is used per interview. If the college runs out, scheduling stops and the remaining rows report "Your credits are not enough".
 - The student must belong to your college.
-- The same student can't have two interviews overlapping within the college's interview duration.
+- The same student can't have two interviews overlapping within the college's interview duration. Clicking twice, or a single and a bulk schedule at the same moment, still creates only one interview and uses one credit.
+- Inactive technologies, modules, topics and companies can't be chosen.
 - Bulk upload shows per-row results: scheduled, already scheduled, not found or out of credits.
 - The student gets an email with the date and time.
 
@@ -162,11 +163,15 @@ Each list shows one day at a time (pick the date) with status:
 | **Upcoming** | It hasn't started yet. Edit and Delete are available. |
 | **Attempted** | The student finished. Click to open the report. |
 | **Expired** | The student didn't start within the allowed window. |
+| **In progress** | The student is taking it now. |
+| **Evaluating** / **Waiting for AI** | Submitted; the score is being calculated. |
+| **Evaluation failed** | Scoring failed; use **Retry evaluation**. |
 
-You can export the list to Excel, filter by technology and search by name or roll number.
+You can export the list to Excel, filter by technology and search by name or roll number. The summary cards and percentage always count the whole day, whatever filter you apply.
 
-- **Edit** works only before the student starts.
-- **Delete** refunds the credit **only if the student never started**. The message tells you whether it was refunded.
+- **Edit** works only before the student starts, and not after the start window has passed.
+- **Delete** is shown for Upcoming, Expired and Evaluation failed interviews; an interview that is in progress or being evaluated can't be deleted.
+- **Refunds:** deleting refunds the credit only if the student never started **and** the start window hasn't passed, or if the questions couldn't be prepared (not the student's fault). Expired no-shows keep their credit used. The message tells you whether the credit was refunded.
 
 ### 5.5 Kiosk devices (college admin)
 - Kiosks register themselves (see [section 7](#7-the-mpod-kiosk)).

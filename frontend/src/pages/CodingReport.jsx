@@ -101,8 +101,10 @@ function CodingReport(props) {
     const [interviewParameters, setInterviewParameters] = useState()
     const [user, setUser] = useState()
     const [startDate, setStartDate] = useState()
+    const [loadError, setLoadError] = useState(false)
     useEffect(() => {
         setLoading(true); // Start loading
+        setLoadError(false);
         axiosInstance.get("get-coding-report-details/" + encodeURIComponent(id) + "/" + encodeURIComponent(interview_type) + "/" + encodeURIComponent(roll_no), { headers: attemptTokenFor(id) ? { "X-Attempt-Token": attemptTokenFor(id) } : {} })
             .then((response) => {
                 if (response.data) {
@@ -114,7 +116,7 @@ function CodingReport(props) {
                     // setImprovements(response.data.overall_analysis.areas_of_improvement);
                     // setInterviewParameters(response.data.overall_analysis.interview_parameters);
                     // console.log(response.data.overall_analysis.interview_parameters)
-                    const questionDetails = response.data.question_details;
+                    const questionDetails = response.data.question_details || [];
                     const sum = questionDetails.reduce((acc, ele) => acc + Number(ele.accuracy), 0);
                     const average = questionDetails.length > 0 ? sum / questionDetails.length : 0;
 
@@ -126,11 +128,16 @@ function CodingReport(props) {
             })
             .catch((error) => {
                 console.error(error);
+                setLoadError(true);
                 setLoading(false);
             });
     }, [roll_no]);
     if (loading) {
         return <div>Loading data, please wait...</div>;
+    }
+
+    if (loadError) {
+        return <div role="alert">Could not load this report. Please try again or sign in again.</div>;
     }
 
     if (!qna || qna.length === 0) {
@@ -295,7 +302,7 @@ function CodingReport(props) {
                                                                 <img src={`${frontendUrl}report-icons/blink.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
                                                                 <p className="mb-1">EYES BLINK</p>
                                                             </div>
-                                                            <h5 style={{ color: "#5EE3EC", marginTop: '5px' }}>{emotions && emotions.blinks}
+                                                            <h5 style={{ color: "#5EE3EC", marginTop: '5px' }}>{emotions?.blinks ? emotions.blinks : 0}
                                                             </h5>
                                                         </div>
                                                     </div>
@@ -469,7 +476,7 @@ function CodingReport(props) {
                                                                                     <div style={{ display: "flex", alignItems: "center", marginTop: "10px", marginLeft: "40px", width: "80%" }}>
                                                                                         <div style={{ flex: 1, background: "#333", borderRadius: "10px", overflow: "hidden", height: "8px" }}>
                                                                                             <div style={{
-                                                                                                width: `${item.matched_accuracy}%`,
+                                                                                                width: `${item.matched_accuracy ?? 0}%`,
                                                                                                 background: "#4CAF50",
                                                                                                 height: "8px",
                                                                                                 borderRadius: "10px"
@@ -477,7 +484,7 @@ function CodingReport(props) {
                                                                                             </div>
                                                                                         </div>
                                                                                         <span style={{ marginLeft: "10px", color: "#fff", fontSize: "14px", fontWeight: "bold" }}>
-                                                                                            {item.matched_accuracy}%
+                                                                                            {item.matched_accuracy == null ? "N/A" : `${item.matched_accuracy}%`}
                                                                                         </span>
                                                                                     </div>
                                                                                 </p>
@@ -681,7 +688,7 @@ function CodingReport(props) {
                                                                                         <div className="comment-author mb-18"><h3>Time taken</h3></div>
                                                                                     </div>
                                                                                     <div className="comment" style={{ marginBottom: "25px" }}>
-                                                                                        <p>{item.time} Sec</p>
+                                                                                        <p>{item.time == null || item.time === "" ? "-" : `${item.time} Sec`}</p>
                                                                                     </div>
                                                                                 </div>
                                                                             </div>
@@ -804,7 +811,7 @@ function CodingReport(props) {
                                                                     <img src={`${frontendUrl}report-icons/blink.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
                                                                     <p className="mb-1" style={{ color: "black" }}>EYES BLINK</p>
                                                                 </div>
-                                                                <h5 style={{ color: "#008738", marginTop: '5px' }}>{emotions?.blinks ? emotions.blinks / 4 : 0}
+                                                                <h5 style={{ color: "#008738", marginTop: '5px' }}>{emotions?.blinks ? emotions.blinks : 0}
                                                                 </h5>
                                                             </div>
                                                         </div>
@@ -968,7 +975,7 @@ function CodingReport(props) {
                                                                                         <div style={{ display: "flex", alignItems: "center", marginTop: "10px", marginLeft: "40px", width: "80%" }}>
                                                                                             <div style={{ flex: 1, background: "#333", borderRadius: "10px", overflow: "hidden", height: "8px" }}>
                                                                                                 <div style={{
-                                                                                                    width: `${item.matched_accuracy}%`,
+                                                                                                    width: `${item.matched_accuracy ?? 0}%`,
                                                                                                     background: "#4CAF50",
                                                                                                     height: "8px",
                                                                                                     borderRadius: "10px"
@@ -976,7 +983,7 @@ function CodingReport(props) {
                                                                                                 </div>
                                                                                             </div>
                                                                                             <span style={{ marginLeft: "10px", color: "#000", fontSize: "14px", fontWeight: "bold" }}>
-                                                                                                {item.matched_accuracy}%
+                                                                                                {item.matched_accuracy == null ? "N/A" : `${item.matched_accuracy}%`}
                                                                                             </span>
                                                                                         </div>
                                                                                     </p>
@@ -1176,7 +1183,7 @@ function CodingReport(props) {
                                                                                             <div className="comment-author mb-18"><h3 style={{ margin: "0", color: "#008738" }}>Time taken</h3></div>
                                                                                         </div>
                                                                                         <div className="comment" style={{ marginBottom: "25px" }}>
-                                                                                            <p>{item.time} Sec</p>
+                                                                                            <p>{item.time == null || item.time === "" ? "-" : `${item.time} Sec`}</p>
                                                                                         </div>
                                                                                     </div>
                                                                                 </div>

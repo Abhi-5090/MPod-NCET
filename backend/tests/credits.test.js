@@ -145,7 +145,7 @@ describe("scheduling consumes credits through the ledger", () => {
 });
 
 describe("deleting interviews and refunds", () => {
-  test("refund once when never started; no refund after start", async () => {
+  test("refund once when never started; no delete while in progress; no refund after start", async () => {
     const agent = await loginAs(s.adminA, { admin: true });
     const a = await agent.post("/backend/api/add-interviewee-details").send(techBody());
     const b = await agent.post("/backend/api/add-interviewee-details").send(techBody({ roll_no: s.studentA2.roll_no }));
@@ -158,7 +158,14 @@ describe("deleting interviews and refunds", () => {
     expect((await agent.delete(`/backend/api/delete-interviewee-details/${a.body.data._id}`)).status).toBe(404);
 
     await Interview.updateOne({ _id: b.body.data._id }, { $set: { "attempt.started_at": new Date() } });
+    // the student is taking it: deleting would destroy their answers
+    const busy = await agent.delete(`/backend/api/delete-interviewee-details/${b.body.data._id}`);
+    expect(busy.status).toBe(409);
+    expect(busy.body.code).toBe("IN_PROGRESS");
+    // once its evaluation has failed it can be deleted, without a refund
+    await Interview.updateOne({ _id: b.body.data._id }, { $set: { submitted_at: new Date(), evaluation_status: "failed" } });
     const del2 = await agent.delete(`/backend/api/delete-interviewee-details/${b.body.data._id}`);
+    expect(del2.status).toBe(200);
     expect(del2.body.refunded).toBe(false);
     expect((await Tenant.findById(s.tenantA._id)).active_credits).toBe(4);
     await assertLedgerReconciles(s.tenantA._id);
@@ -220,8 +227,16 @@ describe("manual credit changes", () => {
 
   test("company interview with tag-less bulk schedule works and charges once per row", async () => {
     const Company = require("../src/models/companies");
+    const CompanyQuestion = require("../src/models/companyQuestion");
     const c = await Company.create({ company_name: "TCS", added_date: "2026-01-01", added_by: "admin", status: 1 });
     const agent = await loginAs(s.adminA, { admin: true });
+    // no matching question yet: refused, and no credit is used
+    const none = await agent.post("/backend/api/add-company-interview").send({
+      platform: "web", roll_no: s.studentA.roll_no, company: [String(c._id)], type: ["Technical"], round: ["TR1"], questions_count: 2, start_date_time: inMinutes(30),
+    });
+    expect(none.status).toBe(400);
+    expect(none.body.code).toBe("NO_QUESTIONS");
+    await CompanyQuestion.create({ company: c._id, type: "Technical", round: "TR1", year: "2025", question: "Tell me about yourself.", status: 1 });
     const res = await agent.post("/backend/api/add-company-interview").send({
       platform: "web", roll_no: s.studentA.roll_no, company: [String(c._id)], type: ["Technical"], round: ["TR1"], questions_count: 2, start_date_time: inMinutes(30),
     });

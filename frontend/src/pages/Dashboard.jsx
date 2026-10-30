@@ -40,7 +40,9 @@ const Dashboard = () => {
       setUser(userData);
       setImageUrl(profilePicUrl(userData.roll_no));
     } catch (error) {
-      navigate('/login');
+      // Only a 401 means "not signed in"; other errors (network, 5xx) are shown instead.
+      if (error.response && error.response.status === 401) navigate('/login');
+      else setLoadError(errorMessage(error, "Could not load your profile. Please refresh."));
     }
   }, [navigate]);
 
@@ -72,7 +74,7 @@ const Dashboard = () => {
   //   return diff > fiveMin;
   // });
 
-  // Interview data refresh checker (every 30 seconds)
+  // Interview data refresh checker (every 60 seconds; each refresh hits five endpoints)
   useEffect(() => {
     if (!user || rules) return; // paused while an interview is open
 
@@ -88,7 +90,7 @@ const Dashboard = () => {
       }
     };
 
-    const interval = setInterval(checkForUpdates, 10000);
+    const interval = setInterval(checkForUpdates, 60000);
     return () => clearInterval(interval);
   }, [interviewsData, user, fetchAllInterviewData, rules]);
 

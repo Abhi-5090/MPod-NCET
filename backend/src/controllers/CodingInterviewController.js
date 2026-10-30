@@ -1,3 +1,4 @@
+const { istDayRange } = require("../lib/time");
 const mongoose = require("mongoose");
 const Interview = require("../models/codingInterview"); // coding interviews
 const scheduling = require("../services/scheduling");
@@ -30,15 +31,22 @@ const deleteCodingInterviewDetails = async (req, res) => {
 
 const getAllCodingInterviewDetails = async (req, res) => {
   const tenant_id = req.params.id
+  const { start: startOfDay, end: endOfDay } = istDayRange(req.query.date ? String(req.query.date) : null, 0);
   try {
+    // One calendar day in India (?date=YYYY-MM-DD, default today), like the other lists.
     const InterviewDetails = await Interview.aggregate([{
-      $match: { $or: [{ tenant_id: new mongoose.Types.ObjectId(tenant_id) }, { tenant_id: { $exists: false } }] },
+      $match: {
+        start_date_time: { $gte: startOfDay, $lte: endOfDay },
+        $or: [{ tenant_id: new mongoose.Types.ObjectId(tenant_id) }, { tenant_id: { $exists: false } }],
+      },
     }, {
       $lookup: {
         from: "users",
         localField: "roll_no",
         foreignField: "roll_no",
         as: "userDetails",
+        // only this college's student (roll numbers repeat across colleges)
+        pipeline: [{ $match: { tenant_id: new mongoose.Types.ObjectId(tenant_id) } }, { $project: { first_name: 1, gender: 1, tenant_id: 1 } }],
       },
     },
     {

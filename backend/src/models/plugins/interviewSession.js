@@ -36,6 +36,7 @@ module.exports = function interviewSessionPlugin(schema) {
     evaluation_mode: { type: String, enum: ["ai", "provisional", null], default: null },
     ai_rescore_pending: { type: Boolean, default: false },
     rescore_next_at: Date,
+    rescore_attempts: { type: Number, default: 0 },
     evaluation_outage_retries: { type: Number, default: 0 },
     evaluation_attempts: { type: Number, default: 0 },
     evaluation_error: String,

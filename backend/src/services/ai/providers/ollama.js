@@ -20,6 +20,7 @@ const DEFAULT_WHO = { name: "dgx", label: "DGX Spark", keyVar: "DGX_API_KEY", ur
 const CAPS_TTL_MS = 10 * 60 * 1000;
 const RETRY_DELAYS_MS = [1000, 3000];
 const LEVELS = ["low", "medium", "high"];
+const TAGS_TTL_MS = 60 * 1000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const isGptOss = (model) => /^gpt-oss/i.test(String(model));
@@ -28,9 +29,11 @@ function create(cfg, { fetchImpl, who = DEFAULT_WHO } = {}) {
   const NAME = who.name;
   const doFetch = fetchImpl || ((...a) => fetch(...a));
   const caps = new Map(); // model -> { list, at }
+  let tags = { list: null, at: 0 }; // installed models (GET /api/tags)
+  const substituted = new Set(); // models already reported as substituted
 
   const keepAlive = /^-?\d+$/.test(String(cfg.keepAlive)) ? Number(cfg.keepAlive) : cfg.keepAlive;
-  const pullHint = (model) => `On the ${who.label} run: ollama pull ${model}`;
+  const pullHint = (model) => `On the Ollama server run: ollama pull ${model}`;
 
   function toAiError(err, { model, timeoutMs } = {}) {
     if (err instanceof AiError) return err;
@@ -118,6 +121,42 @@ function create(cfg, { fetchImpl, who = DEFAULT_WHO } = {}) {
     return list;
   }
 
+  /** Names of the installed models, cached for a minute; null if the server can't list them. */
+  async function installedModels() {
+    if (tags.list && Date.now() - tags.at < TAGS_TTL_MS) return tags.list;
+    try {
+      const data = await request("GET", "/api/tags", undefined, { timeoutMs: 10000 });
+      tags = { list: ((data && data.models) || []).map((m) => m.name || m.model).filter(Boolean), at: Date.now() };
+      return tags.list;
+    } catch (err) {
+      if (err.outage && err.reason !== "model_missing") throw err; // server down: fail over now
+      return null; // listing blocked (e.g. by a gateway): use the names as configured
+    }
+  }
+
+  /**
+   * The installed model to use for a configured name (same rules as ollama_client.py):
+   * exact name; a tag-less name matches an installed tag ("llama3.1" -> "llama3.1:8b");
+   * otherwise the default model (OLLAMA_MODEL) if it is installed. If nothing matches,
+   * the configured name is used and the server reports it as missing.
+   */
+  async function resolveModel(model) {
+    const list = await installedModels();
+    if (!list || list.includes(model)) return model;
+    if (!String(model).includes(":")) {
+      const tagged = list.find((n) => n.split(":")[0] === model);
+      if (tagged) return tagged;
+    }
+    if (cfg.defaultModel && cfg.defaultModel !== model && list.includes(cfg.defaultModel)) {
+      if (!substituted.has(model)) {
+        substituted.add(model);
+        console.warn(`[ai] ${who.label} model "${model}" is not installed; using "${cfg.defaultModel}" instead.`);
+      }
+      return cfg.defaultModel;
+    }
+    return model;
+  }
+
   /** The "think" value to send for a model, or undefined to omit it. */
   async function thinkFor(model) {
     let list = [];
@@ -136,7 +175,8 @@ function create(cfg, { fetchImpl, who = DEFAULT_WHO } = {}) {
     return undefined;
   }
 
-  async function chat({ model, system, user, maxTokens, temperature, interactive, json = true }) {
+  async function chat({ model: configured, system, user, maxTokens, temperature, interactive, json = true }) {
+    const model = await resolveModel(configured);
     const think = await thinkFor(model);
     const thinking = think !== undefined && think !== false;
     const timeoutMs = interactive ? cfg.interactiveTimeoutMs : cfg.timeoutMs;
@@ -163,6 +203,7 @@ function create(cfg, { fetchImpl, who = DEFAULT_WHO } = {}) {
         // eslint-disable-next-line no-await-in-loop
         const data = await request("POST", "/api/chat", body, { timeoutMs, model });
         return {
+          model, // the model that actually answered
           content: data && data.message ? data.message.content : "",
           truncated: data && data.done_reason === "length",
           usage: {
@@ -187,11 +228,14 @@ function create(cfg, { fetchImpl, who = DEFAULT_WHO } = {}) {
     const wanted = [...new Set(Object.values(cfg.models))];
     const missing = [];
     const models = [];
+    tags.at = 0; // a health check always re-reads the installed models
     for (const m of wanted) {
       try {
-        caps.delete(m); // always re-check during a health check
         // eslint-disable-next-line no-await-in-loop
-        models.push({ name: m, capabilities: await capabilities(m) });
+        const used = await resolveModel(m);
+        caps.delete(used); // and their capabilities
+        // eslint-disable-next-line no-await-in-loop
+        models.push({ name: m, ...(used !== m ? { served_as: used } : {}), capabilities: await capabilities(used) });
       } catch (err) {
         if (err.reason !== "model_missing") throw err;
         missing.push(m);
@@ -201,7 +245,7 @@ function create(cfg, { fetchImpl, who = DEFAULT_WHO } = {}) {
       throw new AiError(`${who.label} model${missing.length > 1 ? "s" : ""} not installed: ${missing.join(", ")}.`, {
         provider: NAME,
         reason: "model_missing",
-        hint: `On the ${who.label} run: ${missing.map((m) => `ollama pull ${m}`).join(" && ")}`,
+        hint: `On the Ollama server run: ${missing.map((m) => `ollama pull ${m}`).join(" && ")}`,
         models: missing,
       });
     }

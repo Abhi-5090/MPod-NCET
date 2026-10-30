@@ -20,6 +20,7 @@ import { useParams, useNavigate } from "react-router-dom"
 import { toast } from "react-toastify";
 import { apiUrl, getErrorMessage } from "../../config/api";
 import { useAuth } from "../../context/AuthContext";
+import { isActiveOption, questionCountError } from "./interviewHelpers";
 
 const levelOptions = [
   { label: "Easy", value: "easy" },
@@ -166,18 +167,18 @@ const EditInterview = (props) => {
     }
   };
 
-  const technologyOptionGroup = technologyData.map((ele) => ({
+  const technologyOptionGroup = technologyData.filter(isActiveOption).map((ele) => ({
     options: [
       { label: ele.technology_name, value: ele._id }
     ]
   }));
 
-  const optionModuleGroup = moduleData.map((ele) => ({
+  const optionModuleGroup = moduleData.filter(isActiveOption).map((ele) => ({
     label: ele.module_name,
     value: ele._id
   }));
 
-  const topicOptionGroup = topicData.map((ele) => ({
+  const topicOptionGroup = topicData.filter(isActiveOption).map((ele) => ({
     options: [
       { label: ele.topic_name, value: ele._id }
     ]
@@ -219,7 +220,6 @@ const EditInterview = (props) => {
       !rollNo ||
       !selectedTechnologyGroup ||
       !selectedModuleGroup?.length ||
-      !selectedTopicGroup?.length ||
       !selectedLevel ||
       !data.no_of_questions ||
       !startDate
@@ -227,12 +227,17 @@ const EditInterview = (props) => {
       toast.warn("Please fill all required fields");
       return;
     }
+    const countError = questionCountError(data.no_of_questions, 1, 10);
+    if (countError) {
+      toast.warn(countError);
+      return;
+    }
     const dataList = {
       'platform': selectedPlatform.value,
       'roll_no': rollNo.trim(),
       'technology': selectedTechnologyGroup.value,
       'module': selectedModuleGroup.map(group => group.value),
-      'topic': selectedTopicGroup.map(group => group.value),
+      'topic': (selectedTopicGroup || []).map(group => group.value),
       'start_date_time': new Date(startDate).toISOString(),
       'level': selectedLevel.value,
       "questions_count": data.no_of_questions,
@@ -323,6 +328,7 @@ const EditInterview = (props) => {
                         options={topicOptionGroup}
                         classNamePrefix="select2-selection"
                       />
+                      <small className="text-muted">Leave empty to cover all topics</small>
                     </div>
                   </Col>
                 </Row>

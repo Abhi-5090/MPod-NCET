@@ -49,6 +49,7 @@ function Home2() {
   };
 
   const reset = () => {
+    forgetAttemptTokens(); // the previous student's attempt token must not linger
     setDetails(null);
     setRollNo("");
     setError("");

@@ -134,16 +134,18 @@ export default function useFaceTracking(enabled = true, { client, config } = {})
         ]);
       } catch (_) {
         if (!cancelled) {
-          if (intervalRef.current) clearInterval(intervalRef.current);
+          stop(); // no model to run: release the camera
           setStatus("unavailable");
         }
         return;
       }
       if (cancelled) return;
       modesUsed.current.add("browser");
+      let inFlight = false; // a slow detection must not overlap the next one
       startLoop(async () => {
         const video = videoRef.current;
-        if (!video || video.readyState < 2) return;
+        if (inFlight || !video || video.readyState < 2) return;
+        inFlight = true;
         try {
           const detections = await faceapi
             .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
@@ -152,6 +154,8 @@ export default function useFaceTracking(enabled = true, { client, config } = {})
           process(detections.map(fromBrowser), BROWSER_INTERVAL_MS);
         } catch (_) {
           // skip this frame
+        } finally {
+          inFlight = false;
         }
       }, BROWSER_INTERVAL_MS);
     };

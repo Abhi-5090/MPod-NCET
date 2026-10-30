@@ -25,7 +25,12 @@ async function main() {
     if (!expectsReplicaSet || (hello.setName && hello.isWritablePrimary)) break;
     await new Promise((r) => setTimeout(r, 500));
   }
-  await detectTransactions();
+  const transactions = await detectTransactions();
+  // Credits and interviews are created/refunded together; without transactions a crash
+  // between the two writes can lose a credit. Never run production like that.
+  if (!transactions && env.isProd && process.env.ALLOW_NO_TRANSACTIONS !== "true") {
+    throw new Error("MongoDB must be a replica set in production (needed for credit transactions). Set ALLOW_NO_TRANSACTIONS=true only to override knowingly.");
+  }
   evaluationQueue.start();
   require("./src/services/aiStatus").start(); // background AI health check
 

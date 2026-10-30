@@ -30,8 +30,11 @@ async function sendMail({ to, subject, text }) {
 }
 
 /** Fire-and-forget variant for notifications that must not block a request. */
+// Through module.exports so a replaced/mocked sendMail is used as well.
 const sendMailInBackground = (opts) => {
-  sendMail(opts).catch(() => {});
+  Promise.resolve()
+    .then(() => module.exports.sendMail(opts))
+    .catch((err) => console.error(`[mail] failed to send "${opts && opts.subject}": ${err.message}`));
 };
 
 module.exports = { sendMail, sendMailInBackground };
