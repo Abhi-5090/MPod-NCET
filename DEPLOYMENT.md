@@ -34,6 +34,39 @@
 
 Commands run on the Spark (DGX OS = Ubuntu 24.04, ARM64).
 
+## A0. Your current setup: the Spark on the campus network (192.168.14.123)
+
+During development, mPod reaches the Spark's Ollama directly on the local network. No gateway is needed while everything stays inside the campus network. `backend/.env`:
+
+```
+OLLAMA_URL=http://192.168.14.123:11434
+OLLAMA_MODEL=gpt-oss:20b          # scoring, question generation, summary
+DGX_CODING_MODEL=qwen3-coder:30b  # coding evaluation
+DGX_NUM_CTX=8192
+```
+
+Check it from any machine with the backend: `npm run ai:check`.
+
+**Downloading models fails with "x509: certificate signed by unknown authority".** The Spark's network path intercepts HTTPS, or its certificate store or proxy is wrong, so `ollama pull` can't reach registry.ollama.ai.
+
+- **Workaround (no login to the Spark needed):** from a machine on the same network that *can* download, run:
+
+  ```bash
+  deploy/dgx-spark/ollama/push-model-via-lan.sh http://192.168.14.123:11434 gpt-oss 20b
+  ```
+
+  It streams the model through that machine into the Spark's Ollama, which checks the SHA-256 fingerprint, and rebuilds the model with its original settings. Nothing large is stored on the sending machine.
+- **Permanent fix (on the Spark, as an administrator):**
+  1. Ask the network team for the firewall's root certificate (or use their proxy).
+  2. Install the certificate:
+     ```bash
+     sudo cp campus-root-ca.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates
+     ```
+  3. If a proxy is required, add `Environment="HTTPS_PROXY=http://proxy:port"` to the Ollama service.
+  4. Restart Ollama: `sudo systemctl restart ollama`.
+
+**Security note:** Ollama on port 11434 is open to the whole campus network without a password. Anyone on that network can use, download or *delete* models. Restrict it, either by allowing only the machines that run mPod in the Spark's firewall, or by putting the gateway (A4) in front. AWS can't reach this private address; for AWS, follow A1–A6 (public HTTPS address and API key).
+
 ## A1. Domain name and certificate
 
 The gateway needs HTTPS. Give the Spark's public IP a name, e.g. an **A record** `ai.yourcollege.edu → <public IP>`, and open ports 80 and 443 to it (router or firewall port forwarding).
