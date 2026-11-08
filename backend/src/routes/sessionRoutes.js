@@ -31,6 +31,12 @@ Router.get("/api/system-status", requireStaff(), async (req, res, next) => {
   }
 });
 
+// Settings > AI Model Usage: which AI provider answers every request (platform admins).
+const Settings = require("../controllers/SettingsController");
+Router.get("/api/settings/ai-model", requireStaff(CAN.manageSettings), Settings.getAiModel);
+Router.put("/api/settings/ai-model", requireStaff(CAN.manageSettings), Settings.setAiModel);
+Router.post("/api/settings/ai-model/test", requireStaff(CAN.manageSettings), rl.llm, Settings.testAiModel);
+
 // Kiosk devices
 Router.post("/api/kiosk/register", rl.kioskRegister, Kiosk.register);
 Router.get("/api/kiosk/me", requireKiosk(), Kiosk.me);

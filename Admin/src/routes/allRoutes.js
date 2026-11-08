@@ -28,6 +28,9 @@ const TenantCredits = lazy(() => import("../pages/Tenants/TenantCredits"))
 // Kiosk devices
 const KioskDevices = lazy(() => import("../pages/Kiosk/KioskDevices"))
 
+// Settings
+const AiModelUsage = lazy(() => import("../pages/Settings/AiModelUsage"))
+
 // Content (platform only)
 const TechnologiesList = lazy(() => import("../pages/Technologies/TechnologiesList"))
 const AddTechnology = lazy(() => import("../pages/Technologies/AddTechnology"))
@@ -79,6 +82,7 @@ const userRoutes = [
   { path: "/tenant-credits/:id", component: TenantCredits, roles: ROLES.tenantCredits },
 
   { path: "/kiosk-devices", component: KioskDevices, roles: ROLES.kiosk },
+  { path: "/ai-model-usage", component: AiModelUsage, roles: ROLES.settings },
 
   { path: "/technologies-list", component: TechnologiesList, roles: ROLES.technologies },
   { path: "/add-technology", component: AddTechnology, roles: ROLES.technologies },

@@ -19,6 +19,7 @@ const { AiError } = require("./errors");
 const { createLimiter } = require("./limiter");
 const openai = require("./providers/openai");
 const dgx = require("./providers/dgx");
+const aiSettings = require("../aiSettings");
 
 const TASKS = ["scoring", "generation", "summary", "coding"];
 
@@ -32,8 +33,15 @@ if (!env.isTest && [env.ai.provider, env.ai.fallback].includes("dgx")) {
 const limiters = Object.fromEntries(Object.values(providers).map((p) => [p.name, createLimiter(p.maxConcurrent)]));
 const context = new AsyncLocalStorage();
 
-/** Provider names in the order they are tried. */
-const chain = () => [env.ai.provider, ...(env.ai.fallback !== "none" ? [env.ai.fallback] : [])];
+/**
+ * Provider names in the order they are tried: only the provider chosen in the admin
+ * portal (Settings > AI Model Usage), otherwise AI_PROVIDER then AI_FALLBACK_PROVIDER.
+ */
+const chain = () => {
+  const chosen = aiSettings.current();
+  if (chosen) return [chosen];
+  return [env.ai.provider, ...(env.ai.fallback !== "none" ? [env.ai.fallback] : [])];
+};
 
 /**
  * Parses a model's JSON answer. Tolerates code fences, reasoning blocks (<think>...</think>)
@@ -163,8 +171,9 @@ function usageSummary(usage, startedAt) {
 }
 
 const describe = () => ({
-  provider: env.ai.provider,
-  fallback: env.ai.fallback,
+  provider: chain()[0],
+  fallback: chain()[1] || "none",
+  chosen_in_admin: Boolean(aiSettings.current()),
   providers: chain().map((n) => ({ ...providers[n].describe(), limiter: limiters[n].stats() })),
   vision: require("./vision").describe(),
 });

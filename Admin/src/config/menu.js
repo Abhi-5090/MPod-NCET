@@ -112,6 +112,17 @@ const MENU = [
       },
     ],
   },
+  {
+    section: "Settings",
+    groups: [
+      {
+        title: "Settings",
+        icon: "settings.svg",
+        roles: ROLES.settings,
+        items: [{ label: "AI Model Usage", to: "/ai-model-usage" }],
+      },
+    ],
+  },
 ]
 
 // Returns the menu filtered for `user`, with `to` resolved to strings.

@@ -112,6 +112,8 @@ const env = {
       label: dgxVar("LABEL") || "Ollama",
       // Public HTTPS address of the DGX Spark API gateway (or http://127.0.0.1:11434 on the Spark itself).
       baseURL: (ollamaUrl() || "http://127.0.0.1:11434").trim().replace(/\/+$/, ""),
+      // False when no DGX address is set at all (then only the local default above is tried).
+      configured: Boolean(ollamaUrl()),
       apiKey: (dgxVar("API_KEY") || "").trim(),
       // ollama = Ollama native API; openai = OpenAI-compatible API (vLLM, TensorRT-LLM, SGLang)
       protocol: lower(dgxVar("PROTOCOL"), "ollama"),

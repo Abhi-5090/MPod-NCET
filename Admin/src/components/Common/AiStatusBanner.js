@@ -26,7 +26,13 @@ const AiStatusBanner = () => {
     if (!user) return undefined
     load()
     const t = setInterval(() => load(), REFRESH_MS)
-    return () => clearInterval(t)
+    // Settings > AI Model Usage switched the provider: show its state straight away.
+    const onChange = () => load()
+    window.addEventListener("mpod:ai-settings-changed", onChange)
+    return () => {
+      clearInterval(t)
+      window.removeEventListener("mpod:ai-settings-changed", onChange)
+    }
   }, [user, load])
 
   if (!ai) return null

@@ -30,7 +30,7 @@ const stateOf = (name) => {
   if (!states[name]) states[name] = blank();
   return states[name];
 };
-const chain = () => [env.ai.provider, ...(env.ai.fallback !== "none" ? [env.ai.fallback] : [])];
+const chain = () => require("./ai").chain(); // lazy: avoids a require cycle
 
 // Any error -> AiError. Errors that did not come from an adapter are classified as OpenAI
 // errors, the historical behaviour.
@@ -63,7 +63,7 @@ function describeMissing(name, s, e) {
   });
 }
 
-function recordSuccess(provider = env.ai.provider, model) {
+function recordSuccess(provider = chain()[0], model) {
   const s = stateOf(provider);
   if (model) s.missing.delete(model);
   if (s.missing.size) {
@@ -81,7 +81,7 @@ function recordSuccess(provider = env.ai.provider, model) {
 function recordFailure(err, provider, model) {
   const e = normalise(err);
   if (!e.outage) return; // a bad response for one request says nothing about the provider
-  const name = provider || e.provider || env.ai.provider;
+  const name = provider || e.provider || chain()[0];
   const s = stateOf(name);
   if (e.reason === "model_missing") {
     const until = Date.now() + COOL_DOWN_MS;
@@ -122,40 +122,48 @@ function schedule(ms) {
   timer = setTimeout(() => check().catch(() => {}), ms);
   timer.unref();
 }
+// The provider in use changed (admin portal): check it straight away.
+function recheckNow() {
+  if (started) schedule(0);
+}
 // A provider just failed: make sure the next health check comes soon.
 function scheduleSoon() {
   if (started && nextCheckAt - Date.now() > DOWN_CHECK_MS) schedule(DOWN_CHECK_MS);
 }
 
-/** Health-checks every configured provider. */
-async function check() {
+/** Health-checks one provider (in use or not) and returns its public state. */
+async function checkProvider(name) {
   const ai = require("./ai"); // lazy: avoids a require cycle
-  for (const name of chain()) {
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      await ai.providers[name].health();
-      stateOf(name).missing.clear();
-      recordSuccess(name);
-    } catch (err) {
-      const e = normalise(err);
-      const s = stateOf(name);
-      if (e.reason === "model_missing" && e.models) {
-        // The provider is up; only these models are missing.
-        s.missing = new Map(e.models.map((m) => [m, Date.now() + COOL_DOWN_MS]));
-        describeMissing(name, s, e);
-      } else if (e.outage || s.ok === null) {
-        Object.assign(s, {
-          ok: false,
-          reason: e.reason,
-          message: e.message,
-          hint: e.hint || null,
-          checked_at: new Date(),
-          retry_at: new Date(Date.now() + COOL_DOWN_MS),
-        });
-      }
-      if (!env.isTest) console.warn(`[ai] ${labelOf(name)} unavailable: ${e.message}${e.hint ? ` Fix: ${e.hint}` : ""}`);
+  try {
+    await ai.providers[name].health();
+    stateOf(name).missing.clear();
+    recordSuccess(name);
+  } catch (err) {
+    const e = normalise(err);
+    const s = stateOf(name);
+    if (e.reason === "model_missing" && e.models) {
+      // The provider is up; only these models are missing.
+      s.missing = new Map(e.models.map((m) => [m, Date.now() + COOL_DOWN_MS]));
+      describeMissing(name, s, e);
+    } else if (e.outage || s.ok === null) {
+      Object.assign(s, {
+        ok: false,
+        reason: e.reason,
+        message: e.message,
+        hint: e.hint || null,
+        checked_at: new Date(),
+        retry_at: new Date(Date.now() + COOL_DOWN_MS),
+      });
     }
+    if (!env.isTest) console.warn(`[ai] ${labelOf(name)} unavailable: ${e.message}${e.hint ? ` Fix: ${e.hint}` : ""}`);
   }
+  return publicState(name);
+}
+
+/** Health-checks every provider in use. */
+async function check() {
+  // eslint-disable-next-line no-await-in-loop
+  for (const name of chain()) await checkProvider(name);
   await require("./ai/vision").check();
   const anyDown = chain().some((n) => stateOf(n).ok === false) || require("./ai/vision").getStatus().available === false;
   schedule(anyDown ? DOWN_CHECK_MS : env.ai.healthCheckMinutes * 60 * 1000);
@@ -243,4 +251,4 @@ function _reset() {
   for (const k of Object.keys(states)) delete states[k];
 }
 
-module.exports = { recheckSoon: () => scheduleSoon(), getStatus, recordSuccess, recordFailure, isOutage, isCoolingDown, classify, check, start, stop, _reset };
+module.exports = { recheckSoon: () => scheduleSoon(), recheckNow, checkProvider, providerState: (name) => publicState(name), getStatus, recordSuccess, recordFailure, isOutage, isCoolingDown, classify, check, start, stop, _reset };

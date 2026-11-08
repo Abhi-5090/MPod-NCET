@@ -20,6 +20,8 @@ export const ROLES = {
   codingQuestions: PLATFORM,
   companies: PLATFORM,
   tags: PLATFORM,
+  // Settings > AI Model Usage (backend: CAN.manageSettings)
+  settings: PLATFORM,
 }
 
 export const isPlatformRole = role => PLATFORM.includes(role)

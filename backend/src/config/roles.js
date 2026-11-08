@@ -24,6 +24,7 @@ const CAN = {
   manageKiosks: [...PLATFORM_ROLES, "tenantadmin"],
   viewCredits: [...PLATFORM_ROLES, "tenantadmin"],
   manageCredits: PLATFORM_ROLES,
+  manageSettings: PLATFORM_ROLES,
 };
 
 module.exports = {

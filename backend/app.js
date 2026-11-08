@@ -39,6 +39,7 @@ async function main() {
     throw new Error("MongoDB must be a replica set in production (needed for credit transactions). Set ALLOW_NO_TRANSACTIONS=true only to override knowingly.");
   }
   evaluationQueue.start();
+  await require("./src/services/aiSettings").start(); // AI provider chosen in the admin portal
   require("./src/services/aiStatus").start(); // background AI health check
 
   const server = app.listen(env.port, env.host, () =>
