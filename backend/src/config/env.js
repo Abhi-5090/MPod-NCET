@@ -19,6 +19,14 @@ if (missing.length && process.env.NODE_ENV !== "test") {
 
 const isProd = process.env.NODE_ENV === "production";
 const bool = (v, dflt) => (v == null || v === "" ? dflt : String(v).toLowerCase() === "true");
+// Express treats any string as a list of proxy addresses, so "true" and "2" must become a boolean / number.
+const trustProxySetting = (v) => {
+  const t = String(v || "").trim();
+  if (!t) return "loopback";
+  if (/^(true|false)$/i.test(t)) return t.toLowerCase() === "true";
+  if (/^\d+$/.test(t)) return Number(t);
+  return t;
+};
 const int = (v, dflt) => (v == null || v === "" || Number.isNaN(Number(v)) ? dflt : Number(v));
 // DGX_* settings; OLLAMA_* names from the first self-hosting release still work.
 const dgxVar = (name) => {
@@ -63,7 +71,8 @@ const env = {
   // Cookies must be Secure behind HTTPS. Defaults to true in production.
   cookieSecure: bool(process.env.COOKIE_SECURE, isProd),
   // Express "trust proxy" setting; "loopback" trusts only a reverse proxy on the same host.
-  trustProxy: process.env.TRUST_PROXY || "loopback",
+  // Also accepts true / false, a number of proxies (e.g. 1) or a list of addresses.
+  trustProxy: trustProxySetting(process.env.TRUST_PROXY),
   sessionHours: int(process.env.SESSION_HOURS, 24),
   kioskSessionDays: int(process.env.KIOSK_SESSION_DAYS, 365),
   startGraceMinutes: int(process.env.INTERVIEW_START_GRACE_MINUTES, 5),
