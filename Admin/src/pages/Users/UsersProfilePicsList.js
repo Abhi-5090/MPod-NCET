@@ -110,7 +110,9 @@ const UsersProfilePicsList = (props) => {
             alt="Profile"
             width="50px"
             onError={(e) => {
-              e.target.onerror = null;
+              // Fall back once (clearing e.target.onerror does not stop React's handler).
+              if (e.target.dataset.fallback) return;
+              e.target.dataset.fallback = "1";
               e.target.src = `${IMAGE_BASE}profile-pics/default.png`;
             }}
           />

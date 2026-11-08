@@ -19,7 +19,10 @@ const ProfileMenu = () => {
             alt="Profile"
             width="30px"
             onError={e => {
-              e.target.onerror = null
+              // Fall back once: React's onError is not removed by clearing e.target.onerror,
+              // so without this flag a missing default picture is requested in an endless loop.
+              if (e.target.dataset.fallback) return
+              e.target.dataset.fallback = "1"
               e.target.src = `${IMAGE_BASE}profile-pics/default.png`
             }}
           />
