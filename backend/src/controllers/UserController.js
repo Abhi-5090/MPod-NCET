@@ -8,7 +8,7 @@ const User = require("../models/user");
 const Interview = require("../models/interview");
 const CodingInterview = require("../models/codingInterview");
 const CompanyInterview = require("../models/companyInterview");
-const { PROFILE_PICS_DIR } = require("../config/paths");
+const { PROFILE_PICS_DIR, DEFAULT_PROFILE_PIC } = require("../config/paths");
 const { ASSIGNABLE_ROLES, STAFF_ROLES, PLATFORM_ROLES } = require("../config/roles");
 const { readSheetRows } = require("../services/scheduling");
 const { resolveTenantScope } = require("../middlewares/auth");
@@ -269,6 +269,8 @@ const serveProfilePic = asyncHandler(async (req, res) => {
       if (!ok) throw notFound();
     }
   }
+  // default / logo_header ship with the code, not with the uploads.
+  if (isDefault) return res.sendFile(path.join(path.dirname(DEFAULT_PROFILE_PIC), `${roll}.png`));
   const candidates = [`${roll}.png`, `${roll.toUpperCase()}.png`, `${roll}.${m[2].toLowerCase()}`, `${roll}.jpg`, `${roll}.jpeg`];
   for (const c of candidates) {
     const full = path.join(PROFILE_PICS_DIR, c);
@@ -278,7 +280,7 @@ const serveProfilePic = asyncHandler(async (req, res) => {
       return res.sendFile(full);
     }
   }
-  return res.sendFile(path.join(PROFILE_PICS_DIR, "default.png"));
+  return res.sendFile(DEFAULT_PROFILE_PIC);
 });
 
 // ------------------------------------------------------------ user management

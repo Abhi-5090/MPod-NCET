@@ -1,0 +1,51 @@
+# Render Blueprint for the mPod backend (API). The website and admin portal are on Vercel
+# (vercel.json). Guide: docs/DEPLOY_RENDER_VERCEL.md
+services:
+  - type: web
+    name: mpod-backend
+    runtime: node
+    rootDir: backend
+    # Paid plan: the free plan sleeps after 15 minutes (stopping background scoring)
+    # and cannot keep uploaded files. Keep ONE instance: the evaluation queue and rate
+    # limits live in the process.
+    plan: starter
+    region: singapore
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /backend/api/health
+    disk:
+      name: mpod-uploads
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: production
+      - key: UPLOADS_DIR
+        value: /var/data/uploads
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+      # Filled in on the Render dashboard (never committed):
+      - key: MONGODB_URI
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: PUBLIC_BACKEND_URL
+        sync: false
+      - key: AI_PROVIDER
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: DGX_BASE_URL
+        sync: false
+      - key: DGX_API_KEY
+        sync: false
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASS
+        sync: false

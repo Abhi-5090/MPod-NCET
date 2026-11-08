@@ -1,5 +1,7 @@
 # Deploying mPod: application on AWS, models on the DGX Spark
 
+> Hosting on **Render + Vercel** instead of AWS: see [docs/DEPLOY_RENDER_VERCEL.md](docs/DEPLOY_RENDER_VERCEL.md).
+
 ```
  Students, kiosks, staff
           │ HTTPS
