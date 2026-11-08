@@ -1,3 +1,5 @@
+import React from "react"
+import { Badge } from "reactstrap"
 import { STUDENT_APP_URL } from "../../config/api"
 
 // YYYY-MM-DD for yesterday in IST (UTC+5:30), matching the backend's default date.
@@ -62,3 +64,26 @@ export const questionCountError = (value, min, max) => {
   if (!Number.isInteger(n) || n < min || n > max) return `please enter ${min} to ${max} questions`;
   return null;
 };
+
+// Camera summary from the list API (row.camera): share of time looking at the screen
+// and the most frequent facial expression. null = camera not recorded.
+export const cameraText = (camera) => {
+  if (!camera) return "Not recorded"
+  const parts = []
+  if (camera.attention != null) parts.push(`Attention ${camera.attention}%`)
+  if (camera.mood) parts.push(`mostly ${camera.mood} (${camera.mood_pct}%)`)
+  return parts.join(", ") || "Not recorded"
+}
+
+const attentionColor = (a) => (a == null ? "secondary" : a >= 70 ? "success" : a >= 40 ? "warning" : "danger")
+
+export const cameraCell = (camera) => {
+  if (!camera) return <span className="text-muted">Not recorded</span>
+  const details = `Looked away ${camera.looked_away} times, ${camera.blinks} blinks`
+  return (
+    <span title={details}>
+      {camera.attention != null && <Badge color={attentionColor(camera.attention)} className="me-1">{camera.attention}% attention</Badge>}
+      {camera.mood && <span className="text-capitalize">{camera.mood} {camera.mood_pct}%</span>}
+    </span>
+  )
+}

@@ -233,7 +233,7 @@ For each problem (the timer is the problem's `time` in minutes):
 2. **Write code** (plain text area with copy/paste blocked).
 3. **Optimise code.**
 
-Camera-based attention tracking: the camera model (face detector, 68 landmarks, 7 expressions) runs on the DGX Spark when `DGX_VISION_URL` is set. The browser sends a 320-px frame about once per second to `POST /interview-session/face-frame`, and the backend forwards it with the key; frames are not stored. Otherwise, or when the service fails, face-api.js runs in the browser. It warns if the face is missing or more than one person is visible, and sends aggregate emotion and head-pose counts (plus which mode was used) with the submission.
+Camera-based attention tracking (every interview type; technology and company interviews wait for the camera prompt before the first question): the camera model (face detector, 68 landmarks, 7 expressions) runs on the DGX Spark when `DGX_VISION_URL` is set. The browser sends a 320-px frame about once per second to `POST /interview-session/face-frame`, and the backend forwards it with the key; frames are not stored. Otherwise, or when the service fails, face-api.js runs in the browser. It warns if the face is missing or more than one person is visible, and sends aggregate emotion and head-pose counts (plus which mode was used) with the submission.
 
 ### 5.7 Evaluation pipeline
 - **Technology/company answers:** each one is scored by the AI against a rubric (0–100), returning accuracy, analysis, improvements and confidence. Up to 4 calls run in parallel, with the candidate text fenced as untrusted data. A summary call adds strengths, areas of improvement and 7 skill parameters.
@@ -549,7 +549,7 @@ Routes (all pages lazy-loaded):
   - Right panel, step 1: **Explain your approach** (text area) → **Check idea**. Feedback shows the % and the checks left, or that the check is skipped when the AI is down.
   - Step 2: **Write your code** (monospace text area, copy/paste blocked) → **Done, optimise**.
   - Step 3: **Optimise your code**. **Next problem** / **Submit interview** is available at every step.
-  - The camera runs hidden with on-screen attention warnings. If camera access is denied, a "Camera access is required" screen pauses the problem timers.
+  - The camera shows as a small self-view with on-screen attention warnings. If camera access is denied, a "Camera access is required" screen pauses the problem timers.
 - **After submit:** "Submitting…" → "Evaluating your answers…" (polling) → the report. If scoring is delayed: "Interview submitted. All your answers are saved…" with **Go to dashboard** (website) or **Done – next student** (kiosk).
 
 ### 7.5 Reports (`/report`, `/coding-report`)

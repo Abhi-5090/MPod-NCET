@@ -45,6 +45,7 @@ const CompanyInterviewSchema = mongoose.Schema({
     time_straight: String,
     time_left: String,
     time_right: String,
+    time_away: String, // face not visible (seconds)
     analysis: String,
     emotions: {
       angry: Number,

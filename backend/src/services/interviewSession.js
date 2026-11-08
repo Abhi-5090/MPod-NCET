@@ -524,6 +524,7 @@ function sanitiseEmotions(e) {
     time_straight: str(src.time_straight),
     time_left: str(src.time_left),
     time_right: str(src.time_right),
+    time_away: str(src.time_away),
     // where the camera model ran: server (DGX Spark), browser, or mixed
     analysis: ["server", "browser", "mixed"].includes(src.analysis) ? src.analysis : undefined,
     emotions: {

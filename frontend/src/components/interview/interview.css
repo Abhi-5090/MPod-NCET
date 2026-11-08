@@ -110,7 +110,25 @@
 .mpod-pre { white-space: pre-wrap; color: #9c9aa5; background: transparent; border: none; margin: 0; font-size: 14px; }
 .mpod-field { display: block; margin-bottom: 14px; }
 .mpod-field label { display: block; margin-bottom: 6px; color: #ddd; font-size: 14px; }
+/* Camera self-view. It must stay rendered: browsers stop delivering frames to a
+   display:none video, and the face model would then only see a black image. */
+.mpod-camera-preview {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 160px;
+  height: 120px;
+  object-fit: cover;
+  transform: scaleX(-1); /* mirror, like a normal self-view; analysis uses the raw frames */
+  background: #000;
+  border: 1px solid #ffffff29;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  z-index: 20;
+}
+
 @media (max-width: 600px) {
+  .mpod-camera-preview { width: 96px; height: 72px; right: 8px; bottom: 8px; }
   .mpod-center { padding-top: 110px; }
   .mpod-panel { padding: 16px; }
   .mpod-tall { min-height: 260px; }

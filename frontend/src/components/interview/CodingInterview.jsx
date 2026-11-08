@@ -331,7 +331,7 @@ function CodingInterview({ session, client, onFinish }) {
           </div>
         </div>
       </div>
-      <video ref={face.videoRef} autoPlay playsInline muted width="640" height="480" style={{ display: "none" }} />
+      <video ref={face.videoRef} className="mpod-camera-preview" autoPlay playsInline muted width="640" height="480" aria-label="Your camera" />
     </div>
   );
 }

@@ -261,3 +261,42 @@ describe("coding interview", () => {
     expect(report.body.question_details[0].optimized_result.optimized_percentage).toBe(50);
   });
 });
+
+describe("camera analysis in voice interviews", () => {
+  const summary = {
+    seen_left: 2, seen_right: 1, seen_center: 4, blinks: 31,
+    time_straight: 150, time_left: 30, time_right: 20, analysis: "browser",
+    emotions: { neutral: 64.5, happy: 20, sad: 5, angry: 0, surprise: 10.5, fear: 0, disgust: 0 },
+  };
+
+  test("a technology interview stores the camera summary; the report returns it and the admin list summarises it", async () => {
+    const iv = await techInterview();
+    const agent = await loginAs(s.studentA);
+    const start = await agent.post("/backend/api/interview-session/start").send({ interview_id: String(iv._id), interview_type: "ai generated" });
+    const token = start.body.attempt_token;
+    const submit = await request(app).post("/backend/api/interview-session/submit").set("X-Attempt-Token", token)
+      .send({ interview_id: String(iv._id), interview_type: "ai generated", emotions: { ...summary, time_away: 0 } });
+    expect(submit.status).toBe(202);
+    await waitFor(async () => (await Interview.findById(iv._id)).status === 0);
+
+    const report = await agent.get(`/backend/api/get-question-details/${iv._id}/ai%20generated/${s.studentA.roll_no}`);
+    expect(report.body.emotions).toMatchObject({ blinks: "31", time_straight: "150", time_away: "0", analysis: "browser" });
+    expect(report.body.emotions.emotions).toMatchObject({ neutral: 64.5, happy: 20 });
+
+    const admin = await loginAs(s.adminA, { admin: true });
+    const day = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+    const list = await admin.get(`/backend/api/get-all-interviewee-details/${s.tenantA._id}?date=${day}`);
+    const row = list.body.find((r) => String(r._id) === String(iv._id));
+    expect(row.camera).toEqual({ attention: 75, mood: "neutral", mood_pct: 65, looked_away: 3, blinks: 31 });
+    expect(row.emotions).toBeUndefined();
+  });
+
+  test("an interview without camera data shows as not recorded", () => {
+    const { cameraSummary } = require("../src/services/interviewStatus");
+    expect(cameraSummary(null)).toBeNull();
+    expect(cameraSummary({ seen_center: "1", emotions: { neutral: 0 } })).toBeNull();
+    expect(cameraSummary([summary])).toMatchObject({ attention: 75, mood: "neutral" }); // older array shape
+    // time with the face out of view lowers attention
+    expect(cameraSummary({ ...summary, time_away: 50 }).attention).toBe(60);
+  });
+});

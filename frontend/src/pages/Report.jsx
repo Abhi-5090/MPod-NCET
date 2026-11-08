@@ -11,6 +11,7 @@ import DOMPurify from "dompurify";
 import logo from '../assets/images/logo/mayalogo.png'
 import { AiOutlineDownload } from "react-icons/ai";
 import axiosInstance, { IMAGE_BASE, attemptTokenFor, forgetAttemptTokens } from "../api/axiosInstance";
+import CameraAnalysis from "../components/report/CameraAnalysis";
 
 // const AmCharts5Chart = ({ values, chartId, axisColor }) => {
 //   const chartRef = useRef(null);
@@ -171,7 +172,6 @@ function Report(props) {
     const [accuracyAverage, setAccuracyAverage] = useState(0);
     const [totalDuration, setTotalDuration] = useState();
     const [loading, setLoading] = useState(true);
-    const frontendUrl = "/assets/";
     const [imageUrl, setImageUrl] = useState()
     const [emotions, setEmotions] = useState()
     const [imageLoaded, setImageLoaded] = useState(false);
@@ -260,7 +260,7 @@ function Report(props) {
                 if (response.data) {
                     setInterviewDetails(response.data)
                     setQna(response.data.question_details);
-                    // setEmotions(response.data?.emotions[0]);
+                    setEmotions(response.data.emotions || null);
                     setUser(response.data?.user_details)
                     setStartDate(response.data.start_date_time)
                     setStrengths(response.data.overall_analysis?.strengths || []);
@@ -453,161 +453,7 @@ function Report(props) {
                                         </div>
 
                                     </div>
-                                    {/* <div className="container text-center text-light py-4">
-                                        <div className="row g-3">
-                                            <div className="col-12 col-md-6" style={{ backgroundColor: "#1c1c1c", borderRadius: "10px", border: "1px solid #ffffff29" }}>
-                                                <div className="row g-3">
-                                                    <div className="col-6 col-sm-3" style={{ marginBottom: "20px" }}>
-                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                <img src={`${frontendUrl}report-icons/seen-left.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                <p className="mb-1">SEEN LEFT</p>
-                                                            </div>
-                                                            <h5 style={{ color: "#5EE3EC", marginTop: '5px' }}>{emotions && emotions.seen_left}</h5>
-                                                        </div>
-                                                    </div>
-                                                    <div className="col-6 col-sm-3">
-                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                <img src={`${frontendUrl}report-icons/seen-center.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                <p className="mb-1">SEEN CENTER</p>
-                                                            </div>
-                                                            <h5 style={{ color: "#5EE3EC", marginTop: '5px' }}>{emotions && emotions.seen_center}</h5>
-                                                        </div>
-                                                    </div>
-                                                    <div className="col-6 col-sm-3">
-                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                <img src={`${frontendUrl}report-icons/blink.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                <p className="mb-1">EYES BLINK</p>
-                                                            </div>
-                                                            <h5 style={{ color: "#5EE3EC", marginTop: '5px' }}>{emotions?.blinks ? emotions.blinks : 0}
-                                                            </h5>
-                                                        </div>
-                                                    </div>
-                                                    <div className="col-6 col-sm-3">
-                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                <img src={`${frontendUrl}report-icons/seen-right.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                <p className="mb-1">SEEN RIGHT</p>
-                                                            </div>
-                                                            <h5 style={{ color: "#5EE3EC", marginTop: '5px' }}>{emotions && emotions.seen_right}</h5>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="col-12 col-md-6" style={{ backgroundColor: "#1c1c1c", borderRadius: "10px", border: "1px solid #ffffff29" }}>
-                                                <div className="row g-3">
-                                                    <div className="col-6 col-sm-3">
-                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                <img src={`${frontendUrl}report-icons/angry.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                <p className="mb-1">ANGRY</p>
-                                                            </div>
-                                                            <h5 style={{ color: "#5EE3EC" }}>{emotions && emotions.emotions.angry}%</h5>
-                                                        </div>
-                                                    </div>
-                                                    <div className="col-6 col-sm-3">
-                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                <img src={`${frontendUrl}report-icons/disgust.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                <p className="mb-1">DISGUST</p>
-                                                            </div>
-                                                            <h5 style={{ color: "#5EE3EC" }}>{emotions && emotions.emotions.disgust}%</h5>
-                                                        </div>
-                                                    </div>
-                                                    <div className="col-6 col-sm-3">
-                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                <img src={`${frontendUrl}report-icons/fear.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                <p className="mb-1">FEAR</p>
-                                                            </div>
-                                                            <h5 style={{ color: "#5EE3EC" }}>{emotions && emotions.emotions.fear}%</h5>
-                                                        </div>
-                                                    </div>
-                                                    <div className="col-6 col-sm-3">
-                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                <img src={`${frontendUrl}report-icons/happy.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                <p className="mb-1">HAPPY</p>
-                                                            </div>
-                                                            <h5 style={{ color: "#5EE3EC" }}>{emotions && emotions.emotions.happy}%</h5>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {emotions &&
-                                            <div className="row g-3 mt-3">
-                                                <div className="col-12 col-md-6" style={{ backgroundColor: "#1c1c1c", borderRadius: "10px", border: "1px solid #ffffff29" }}>
-                                                    <div className="row g-3">
-                                                        <div className="col-4 col-sm-4" style={{ marginBottom: "20px" }}>
-                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <img src={`${frontendUrl}report-icons/seen-left.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                    <p className="mb-1">LOOKING LEFT</p>
-                                                                </div>
-                                                                <h5 style={{ color: "#5EE3EC" }}>{emotions && emotions.time_left} SEC</h5>
-                                                            </div>
-                                                        </div>
-                                                        <div className="col-4 col-sm-4">
-                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <img src={`${frontendUrl}report-icons/seen-center.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                    <p className="mb-1">LOOKING STRAIGHT</p>
-                                                                </div>
-                                                                <h5 style={{ color: "#5EE3EC" }}>{emotions && emotions.time_straight} SEC</h5>
-                                                            </div>
-                                                        </div>
-                                                        <div className="col-4 col-sm-4">
-                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <img src={`${frontendUrl}report-icons/seen-right.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                    <p className="mb-1">LOOKING RIGHT</p>
-                                                                </div>
-                                                                <h5 style={{ color: "#5EE3EC" }}>{emotions && emotions.time_right} SEC</h5>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="col-12 col-md-6" style={{ backgroundColor: "#1c1c1c", borderRadius: "10px", border: "1px solid #ffffff29" }}>
-                                                    <div className="row g-3">
-                                                        <div className="col-4 col-sm-4">
-                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <img src={`${frontendUrl}report-icons/neutral.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                    <p className="mb-1">NEUTRAL</p>
-                                                                </div>
-                                                                <h5 style={{ color: "#5EE3EC" }}>{emotions && emotions.emotions.neutral}%</h5>
-                                                            </div>
-                                                        </div>
-                                                        <div className="col-4 col-sm-4">
-                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <img src={`${frontendUrl}report-icons/sad.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                    <p className="mb-1">SAD</p>
-                                                                </div>
-                                                                <h5 style={{ color: "#5EE3EC" }}>{emotions && emotions.emotions.sad}%</h5>
-                                                            </div>
-                                                        </div>
-                                                        <div className="col-4 col-sm-4">
-                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <img src={`${frontendUrl}report-icons/surprise.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                    <p className="mb-1">SURPRISE</p>
-                                                                </div>
-                                                                <h5 style={{ color: "#5EE3EC" }}>{emotions && emotions.emotions.surprise}%</h5>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        }
-
-                                    </div> */}
+                                    <CameraAnalysis emotions={emotions} variant="screen" />
 
 
                                 </div>
@@ -937,161 +783,7 @@ function Report(props) {
                                             </div>
 
                                         </div>
-                                        {/* <div className="container text-center text-light py-4">
-                                            <div className="row g-3" >
-                                                <div className="col-12 col-md-6" style={{ backgroundColor: "#fff", borderRadius: "10px", marginRight: "20px", marginLeft: "30px", border: "1px solid #008738" }}>
-                                                    <div className="row g-3">
-                                                        <div className="col-6 col-sm-3" style={{ marginBottom: "20px" }}>
-                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <img src={`${frontendUrl}report-icons/seen-left.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                    <p className="mb-1" style={{ color: "black" }}>SEEN LEFT</p>
-                                                                </div>
-                                                                <h5 style={{ color: "#008738", marginTop: '5px' }}>{emotions && emotions.seen_left}</h5>
-                                                            </div>
-                                                        </div>
-                                                        <div className="col-6 col-sm-3">
-                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <img src={`${frontendUrl}report-icons/seen-center.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                    <p className="mb-1" style={{ color: "black" }}>SEEN CENTER</p>
-                                                                </div>
-                                                                <h5 style={{ color: "#008738", marginTop: '5px' }}>{emotions && emotions.seen_center}</h5>
-                                                            </div>
-                                                        </div>
-                                                        <div className="col-6 col-sm-3">
-                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <img src={`${frontendUrl}report-icons/blink.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                    <p className="mb-1" style={{ color: "black" }}>EYES BLINK</p>
-                                                                </div>
-                                                                <h5 style={{ color: "#008738", marginTop: '5px' }}>{emotions?.blinks ? emotions.blinks : 0}
-                                                                </h5>
-                                                            </div>
-                                                        </div>
-                                                        <div className="col-6 col-sm-3">
-                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <img src={`${frontendUrl}report-icons/seen-right.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                    <p className="mb-1" style={{ color: "black" }}>SEEN RIGHT</p>
-                                                                </div>
-                                                                <h5 style={{ color: "#008738", marginTop: '5px' }}>{emotions && emotions.seen_right}</h5>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="col-12 col-md-5" style={{ backgroundColor: "#fff", borderRadius: "10px", border: "1px solid #008738" }}>
-                                                    <div className="row g-3">
-                                                        <div className="col-6 col-sm-3">
-                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <img src={`${frontendUrl}report-icons/angry.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                    <p className="mb-1" style={{ color: "black" }}>ANGRY</p>
-                                                                </div>
-                                                                <h5 style={{ color: "#008738" }}>{emotions && emotions.emotions.angry}%</h5>
-                                                            </div>
-                                                        </div>
-                                                        <div className="col-6 col-sm-3">
-                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <img src={`${frontendUrl}report-icons/disgust.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                    <p className="mb-1" style={{ color: "black" }}>DISGUST</p>
-                                                                </div>
-                                                                <h5 style={{ color: "#008738" }}>{emotions && emotions.emotions.disgust}%</h5>
-                                                            </div>
-                                                        </div>
-                                                        <div className="col-6 col-sm-3">
-                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <img src={`${frontendUrl}report-icons/fear.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                    <p className="mb-1" style={{ color: "black" }}>FEAR</p>
-                                                                </div>
-                                                                <h5 style={{ color: "#008738" }}>{emotions && emotions.emotions.fear}%</h5>
-                                                            </div>
-                                                        </div>
-                                                        <div className="col-6 col-sm-3">
-                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                    <img src={`${frontendUrl}report-icons/happy.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                    <p className="mb-1" style={{ color: "black" }}>HAPPY</p>
-                                                                </div>
-                                                                <h5 style={{ color: "#008738" }}>{emotions && emotions.emotions.happy}%</h5>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {emotions &&
-                                                <div className="row g-3 mt-3">
-                                                    <div className="col-12 col-md-6" style={{ backgroundColor: "#fff", borderRadius: "10px", marginRight: "20px", marginLeft: "30px", border: "1px solid #008738" }}>
-                                                        <div className="row g-3">
-                                                            <div className="col-4 col-sm-4" style={{ marginBottom: "20px" }}>
-                                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                        <img src={`${frontendUrl}report-icons/seen-left.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                        <p className="mb-1" style={{ color: "black" }}>LOOKING LEFT</p>
-                                                                    </div>
-                                                                    <h5 style={{ color: "#008738" }}>{emotions && emotions.time_left} SEC</h5>
-                                                                </div>
-                                                            </div>
-                                                            <div className="col-4 col-sm-4">
-                                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                        <img src={`${frontendUrl}report-icons/seen-center.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                        <p className="mb-1" style={{ color: "black" }}>LOOKING STRAIGHT</p>
-                                                                    </div>
-                                                                    <h5 style={{ color: "#008738" }}>{emotions && emotions.time_straight} SEC</h5>
-                                                                </div>
-                                                            </div>
-                                                            <div className="col-4 col-sm-4">
-                                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                        <img src={`${frontendUrl}report-icons/seen-right.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                        <p className="mb-1" style={{ color: "black" }}>LOOKING RIGHT</p>
-                                                                    </div>
-                                                                    <h5 style={{ color: "#008738" }}>{emotions && emotions.time_right} SEC</h5>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="col-12 col-md-5" style={{ backgroundColor: "#fff", borderRadius: "10px", border: "1px solid #008738" }}>
-                                                        <div className="row g-3">
-                                                            <div className="col-4 col-sm-4">
-                                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                        <img src={`${frontendUrl}report-icons/neutral.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                        <p className="mb-1" style={{ color: "black" }}>NEUTRAL</p>
-                                                                    </div>
-                                                                    <h5 style={{ color: "#008738" }}>{emotions && emotions.emotions.neutral}%</h5>
-                                                                </div>
-                                                            </div>
-                                                            <div className="col-4 col-sm-4">
-                                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                        <img src={`${frontendUrl}report-icons/sad.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                        <p className="mb-1" style={{ color: "black" }}>SAD</p>
-                                                                    </div>
-                                                                    <h5 style={{ color: "#008738" }}>{emotions && emotions.emotions.sad}%</h5>
-                                                                </div>
-                                                            </div>
-                                                            <div className="col-4 col-sm-4">
-                                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: "10px" }}>
-                                                                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                                        <img src={`${frontendUrl}report-icons/surprise.png`} width="20px" style={{ marginRight: "5px" }} alt="icon" />
-                                                                        <p className="mb-1" style={{ color: "black" }}>SURPRISE</p>
-                                                                    </div>
-                                                                    <h5 style={{ color: "#008738" }}>{emotions && emotions.emotions.surprise}%</h5>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            }
-
-                                        </div> */}
+                                        <CameraAnalysis emotions={emotions} variant="print" />
 
 
                                     </div>

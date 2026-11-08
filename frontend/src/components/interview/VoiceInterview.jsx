@@ -5,6 +5,7 @@ import SpeechRecognition, { useSpeechRecognition } from "react-speech-recognitio
 import timerAnimation from "../../assets/timer.json";
 import aiAnimation from "../../assets/ai.json";
 import { withRetry } from "./sessionApi";
+import useFaceTracking from "./useFaceTracking";
 
 const ANSWER_SECONDS = 60;
 const BUFFER_SECONDS = 5;
@@ -23,6 +24,8 @@ const statusOf = (err) => err && err.response && err.response.status;
 /**
  * Technology / company interview: each question is read aloud, the student answers
  * by voice (or by typing), and every answer is saved to the server immediately.
+ * The camera tracks attention and expressions as in the coding interview; questions
+ * start only after the student has answered the browser's camera prompt.
  * Timers and callbacks read the latest values through refs so parent re-renders
  * never reset them.
  */
@@ -48,6 +51,12 @@ function VoiceInterview({ session, client, onFinish }) {
   const [saveError, setSaveError] = useState("");
   const [fatal, setFatal] = useState("");
   const [deadlineLeft, setDeadlineLeft] = useState(null);
+
+  const face = useFaceTracking(true, { client, config: session.face_analysis });
+  // Waiting for the camera prompt, or camera blocked: questions and timers wait.
+  const cameraBlocked = face.status === "loading" || face.status === "denied";
+  const faceRef = useRef(face);
+  faceRef.current = face;
 
   const { transcript, resetTranscript, browserSupportsSpeechRecognition, isMicrophoneAvailable } = useSpeechRecognition();
   const canUseVoice = browserSupportsSpeechRecognition && isMicrophoneAvailable !== false;
@@ -87,7 +96,10 @@ function VoiceInterview({ session, client, onFinish }) {
     finishedRef.current = true;
     stopListening();
     if (window.speechSynthesis) window.speechSynthesis.cancel();
-    onFinishRef.current();
+    const f = faceRef.current;
+    const emotions = f.status === "on" ? f.summary() : undefined;
+    f.stop();
+    onFinishRef.current(emotions);
   }, []);
 
   // Saves the current answer as final, then moves to the next question (or finishes).
@@ -171,7 +183,7 @@ function VoiceInterview({ session, client, onFinish }) {
 
   // Phase: read the question aloud.
   useEffect(() => {
-    if (phase !== "speaking" || !question) return undefined;
+    if (phase !== "speaking" || !question || cameraBlocked) return undefined;
     const synth = window.speechSynthesis;
     let done = false;
     let utter = null;
@@ -208,11 +220,11 @@ function VoiceInterview({ session, client, onFinish }) {
       }
       synth.cancel();
     };
-  }, [phase, question]);
+  }, [phase, question, cameraBlocked]);
 
   // Phase: short countdown before answering.
   useEffect(() => {
-    if (phase !== "buffer") return undefined;
+    if (phase !== "buffer" || cameraBlocked) return undefined;
     if (seconds <= 0) {
       resetRef.current();
       answerStartRef.current = Date.now();
@@ -223,18 +235,18 @@ function VoiceInterview({ session, client, onFinish }) {
     }
     const t = setTimeout(() => setSeconds((x) => x - 1), 1000);
     return () => clearTimeout(t);
-  }, [phase, seconds, canUseVoice, typing]);
+  }, [phase, seconds, canUseVoice, typing, cameraBlocked]);
 
   // Phase: answering countdown.
   useEffect(() => {
-    if (phase !== "answering") return undefined;
+    if (phase !== "answering" || cameraBlocked) return undefined;
     if (seconds <= 0) {
       advance();
       return undefined;
     }
     const t = setTimeout(() => setSeconds((x) => x - 1), 1000);
     return () => clearTimeout(t);
-  }, [phase, seconds, advance]);
+  }, [phase, seconds, advance, cameraBlocked]);
 
   // Autosave the in-progress answer (not final) so a crash loses at most a few seconds.
   useEffect(() => {
@@ -264,87 +276,120 @@ function VoiceInterview({ session, client, onFinish }) {
     setTyping(true);
   };
 
-  if (fatal) {
+  const renderBody = () => {
+    if (fatal) {
+      return (
+        <div className="mpod-center">
+          <div className="mpod-panel mpod-panel-narrow" role="alert">
+            <h2 className="mpod-title">Interview paused</h2>
+            <p className="mpod-muted">{fatal}</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (face.status === "denied") {
+      return (
+        <div className="mpod-center">
+          <div className="mpod-panel mpod-panel-narrow" role="alert">
+            <h2 className="mpod-title">Camera access is required</h2>
+            <p className="mpod-muted">Allow camera access in your browser for this site, then reload the page. Your answers so far are saved, but the overall interview time limit still applies.</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (face.status === "loading") {
+      return (
+        <div className="mpod-center">
+          <div className="mpod-panel mpod-panel-narrow" role="status">
+            <h2 className="mpod-title">Turning on your camera</h2>
+            <p className="mpod-muted">If your browser asks, allow camera access. The first question starts right after.</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (!question) return null;
+    const isLast = index === questions.length - 1;
+    const mmss = (s) => `${String(Math.floor(Math.max(s, 0) / 60)).padStart(2, "0")}:${String(Math.max(s, 0) % 60).padStart(2, "0")}`;
+
     return (
       <div className="mpod-center">
-        <div className="mpod-panel mpod-panel-narrow" role="alert">
-          <h2 className="mpod-title">Interview paused</h2>
-          <p className="mpod-muted">{fatal}</p>
+        <div className="mpod-panel mpod-question">
+          <div className="mpod-question-main">
+            <div className="mpod-row">
+              <h2 className="mpod-title">QUESTION {index + 1} / {questions.length}</h2>
+              <h2 className="mpod-accent" aria-live="off">
+                {phase === "answering" ? mmss(seconds) : mmss(ANSWER_SECONDS)}
+              </h2>
+            </div>
+            {deadlineLeft !== null && deadlineLeft < 120 && (
+              <p className="mpod-warn" role="status">Interview time left: {mmss(deadlineLeft)}</p>
+            )}
+            <h3 className="mpod-question-text">{question.question}</h3>
+
+            {phase === "answering" ? (
+              <>
+                <span className="mpod-accent mpod-strong">Answer{useTyping ? " (type below)" : " (speak now)"}:</span>
+                {useTyping ? (
+                  <textarea
+                    className="mpod-textarea"
+                    value={typed}
+                    onChange={(e) => setTyped(e.target.value)}
+                    placeholder="Type your answer here..."
+                    maxLength={10000}
+                    aria-label="Your answer"
+                    autoFocus
+                  />
+                ) : (
+                  <div className="mpod-answer-box" aria-live="polite">
+                    <p>{spoken || "Your answer will appear here as you speak..."}</p>
+                  </div>
+                )}
+                {!canUseVoice && (
+                  <p className="mpod-muted">Voice input is not available in this browser or the microphone is blocked, so please type your answer.</p>
+                )}
+                <div className="mpod-actions">
+                  {canUseVoice && !typing && (
+                    <button className="mpod-btn" onClick={switchToTyping}>Type instead</button>
+                  )}
+                  <button className="mpod-btn mpod-btn-primary" onClick={() => advance()}>
+                    {isLast ? "Submit interview" : "Next question"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="mpod-answer-box mpod-answer-wait">
+                {phase === "buffer" ? (
+                  <div style={{ textAlign: "center" }}>
+                    <Lottie animationData={timerAnimation} loop style={{ width: 100, height: 100, margin: "0 auto" }} />
+                    <p>Start answering in <span className="mpod-accent">{seconds}</span> seconds...</p>
+                  </div>
+                ) : phase === "saving" ? (
+                  <p role="status">Saving your answer...</p>
+                ) : (
+                  <Lottie animationData={aiAnimation} loop style={{ width: 150, height: 150 }} />
+                )}
+              </div>
+            )}
+            {saveError && <p className="mpod-warn" role="alert">{saveError}</p>}
+            {face.warning && <p className="mpod-warn" role="alert">{face.warning}</p>}
+          </div>
+          <div className="mpod-question-side">
+            <img src="/ai-robo.gif" alt="" width="200" />
+          </div>
         </div>
       </div>
     );
-  }
+  };
 
-  if (!question) return null;
-  const isLast = index === questions.length - 1;
-  const mmss = (s) => `${String(Math.floor(Math.max(s, 0) / 60)).padStart(2, "0")}:${String(Math.max(s, 0) % 60).padStart(2, "0")}`;
-
+  // One camera element for the whole interview: the stream is attached to it once.
   return (
-    <div className="mpod-center">
-      <div className="mpod-panel mpod-question">
-        <div className="mpod-question-main">
-          <div className="mpod-row">
-            <h2 className="mpod-title">QUESTION {index + 1} / {questions.length}</h2>
-            <h2 className="mpod-accent" aria-live="off">
-              {phase === "answering" ? mmss(seconds) : mmss(ANSWER_SECONDS)}
-            </h2>
-          </div>
-          {deadlineLeft !== null && deadlineLeft < 120 && (
-            <p className="mpod-warn" role="status">Interview time left: {mmss(deadlineLeft)}</p>
-          )}
-          <h3 className="mpod-question-text">{question.question}</h3>
-
-          {phase === "answering" ? (
-            <>
-              <span className="mpod-accent mpod-strong">Answer{useTyping ? " (type below)" : " (speak now)"}:</span>
-              {useTyping ? (
-                <textarea
-                  className="mpod-textarea"
-                  value={typed}
-                  onChange={(e) => setTyped(e.target.value)}
-                  placeholder="Type your answer here..."
-                  maxLength={10000}
-                  aria-label="Your answer"
-                  autoFocus
-                />
-              ) : (
-                <div className="mpod-answer-box" aria-live="polite">
-                  <p>{spoken || "Your answer will appear here as you speak..."}</p>
-                </div>
-              )}
-              {!canUseVoice && (
-                <p className="mpod-muted">Voice input is not available in this browser or the microphone is blocked, so please type your answer.</p>
-              )}
-              <div className="mpod-actions">
-                {canUseVoice && !typing && (
-                  <button className="mpod-btn" onClick={switchToTyping}>Type instead</button>
-                )}
-                <button className="mpod-btn mpod-btn-primary" onClick={() => advance()}>
-                  {isLast ? "Submit interview" : "Next question"}
-                </button>
-              </div>
-            </>
-          ) : (
-            <div className="mpod-answer-box mpod-answer-wait">
-              {phase === "buffer" ? (
-                <div style={{ textAlign: "center" }}>
-                  <Lottie animationData={timerAnimation} loop style={{ width: 100, height: 100, margin: "0 auto" }} />
-                  <p>Start answering in <span className="mpod-accent">{seconds}</span> seconds...</p>
-                </div>
-              ) : phase === "saving" ? (
-                <p role="status">Saving your answer...</p>
-              ) : (
-                <Lottie animationData={aiAnimation} loop style={{ width: 150, height: 150 }} />
-              )}
-            </div>
-          )}
-          {saveError && <p className="mpod-warn" role="alert">{saveError}</p>}
-        </div>
-        <div className="mpod-question-side">
-          <img src="/ai-robo.gif" alt="" width="200" />
-        </div>
-      </div>
-    </div>
+    <>
+      {renderBody()}
+      <video ref={face.videoRef} className="mpod-camera-preview" autoPlay playsInline muted width="640" height="480" aria-label="Your camera" />
+    </>
   );
 }
 

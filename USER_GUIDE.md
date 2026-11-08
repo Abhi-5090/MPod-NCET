@@ -109,6 +109,14 @@ When a company interview starts, mPod randomly picks the requested number of que
 ### 4.5 Practice question bank (Interview Questions)
 **Questions → Interview Questions → Add**: choose a technology (and optionally companies) and upload an Excel file with the columns `question`, `answer` and optionally `star_status` (1 means "previously asked in interviews").
 
+### 4.6 Which AI is used (Settings → AI Model Usage)
+Choose **DGX Spark** (the self-hosted models on campus) or **OpenAI** for every interview: generating questions, scoring answers, report summaries and coding evaluation. Each card shows the model used for each of these, whether the provider is answering right now, and a **Test connection** button. Select a card, press **Use …** and confirm.
+
+- The change applies from the next AI request, for every college, without restarting anything.
+- Only the chosen one is used. If it stops answering, interviews still run (questions from the question bank, scores completed once it is back), and the banner at the top of the admin portal says so.
+- Until someone chooses here, the server settings (`AI_PROVIDER` in `backend/.env`) apply, including any backup provider.
+- A provider can be chosen only when it is set up on the server (`DGX_BASE_URL` for the DGX Spark, `OPENAI_API_KEY` for OpenAI).
+
 ---
 
 ## 5. Running a college
@@ -200,13 +208,16 @@ You can export the list to Excel, filter by technology and search by name or rol
 - No microphone, or a browser without voice support? Click **Type instead** and type your answer. Voice needs **Google Chrome**.
 - Your answer is saved when you move on, and every 15 seconds while you answer.
 
+### The camera (every interview)
+The camera is on for every interview type. Allow camera access when the browser asks; the first question starts right after. A small self-view in the bottom-right corner shows what the camera sees. Stay in front of it: a warning appears if your face can't be seen or more than one person is visible. Only totals are kept (where you looked, blinks, and the share of each facial expression); no video or photos are saved. If camera access is blocked, the interview waits on a "Camera access is required" screen.
+
 ### Coding interviews
 For each problem:
 1. **Explain your approach** and click **Check idea**. You need at least 50% to continue, and you get up to 5 checks. If you use them all, you can still write code.
 2. **Write your code** and click **Done, optimise**.
 3. **Optimise your code** and click **Next problem** (or **Submit interview** on the last one).
 
-Each problem has its own timer, and the camera must stay on. Copy and paste are disabled in the answer boxes.
+Each problem has its own timer. Copy and paste are disabled in the answer boxes.
 
 ### After submitting
 "Evaluating your answers…" usually takes less than a minute, then your **report** opens. It also stays available under **My Interviews → View**.
@@ -243,11 +254,14 @@ A kiosk only accepts students of its own college, and only for interviews schedu
 - overall accuracy and confidence
 - **strengths** and **areas of improvement**
 - for each question: the question, the student's answer, an accuracy score, the analysis, improvement tips and the time taken
+- **camera analysis**: how many times the student turned left, right or back to the centre (their own left and right), blinks, seconds looking left, straight or right, seconds the face was **not visible**, and the share of each expression (angry, disgust, fear, happy, neutral, sad, surprise). A head turn counts after about half a second, so small movements are ignored; the straight-ahead position is learned from each student's first seconds, so a webcam placed to one side is fine. If the face disappears right after a turn (turned too far for the camera), up to 5 seconds count as that side.
 - a **PDF download**
 
 **Coding report**
 - for each problem: the idea and its score, the code, the optimised code, correctness, time and space complexity, code-quality notes, and optimisation %
-- attention data from the camera: looking left, centre or right, and blinks
+- the same camera analysis as the technology and company report
+
+In the admin portal, the interview lists have a **Camera** column: the share of time the student looked at the screen and their most frequent expression (hover for look-aways and blinks). It is also in the Excel export. Interviews taken before the camera was added show "Not recorded".
 
 ---
 

@@ -17,7 +17,7 @@ import ConfirmModal from "../../components/Common/ConfirmModal";
 import {
   deleteResultMessage,
   getTodayDateString,
-  studentReportUrl, statusColor, canRetryEvaluation, canDeleteInterview } from "./interviewHelpers";
+  studentReportUrl, statusColor, canRetryEvaluation, canDeleteInterview, cameraCell, cameraText } from "./interviewHelpers";
 import "./datatables.scss";
 
 const CodingInterviewsList = (props) => {
@@ -139,6 +139,7 @@ const CodingInterviewsList = (props) => {
         </Badge>{row && row.provisional && (<Badge color="warning" className="ms-1" title={row.evaluation_error || "Scored without AI"}>Provisional</Badge>)}</>
       ),
     },
+    { dataField: "camera", text: "Camera", formatter: (camera) => cameraCell(camera) },
     {
       dataField: "actions",
       text: "Actions",
@@ -193,6 +194,7 @@ const CodingInterviewsList = (props) => {
       "No of Questions": item.questions_count,
       "Start Date & Time": item.start_date_time_ist,
       Status: item.interview_status,
+      Camera: cameraText(item.camera),
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);

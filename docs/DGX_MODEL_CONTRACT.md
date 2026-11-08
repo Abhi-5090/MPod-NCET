@@ -26,7 +26,7 @@ This document is for the team that prepares and serves the models on the NVIDIA 
 | 2 | **Answer scoring** (`scoring`) | Scores every spoken answer in technology and company interviews: accuracy 0–100, analysis, improvements. Highest impact on quality. | OpenAI `gpt-4o` | `gpt-oss:120b` | `DGX_SCORING_MODEL` |
 | 3 | **Interview summary** (`summary`) | Strengths, areas of improvement and 7 skill ratings for each technology or company interview | OpenAI `gpt-3.5-turbo` | `gpt-oss:20b` | `DGX_SUMMARY_MODEL` |
 | 4 | **Coding evaluation** (`coding`) | The idea check while the student is waiting, then code correctness, complexity and quality, and the optimisation comparison | OpenAI `gpt-4-turbo` | `qwen3-coder:30b` | `DGX_CODING_MODEL` |
-| 5 | **Camera analysis** (vision) | Coding interview only: finds the face, its 68 face points and 7 emotions, about once per second. mPod derives head direction (left, centre, right), blinks and emotion share from this. | `face-api.js` in the student's browser: TinyFaceDetector + FaceLandmark68Net + FaceExpressionNet | Any detector + 68-point landmark model + 7-class expression model behind the contract in section 4 | `DGX_VISION_URL` |
+| 5 | **Camera analysis** (vision) | Every interview: finds the face, its 68 face points and 7 emotions, about once per second. mPod derives head direction (left, centre, right), blinks and emotion share from this. | `face-api.js` in the student's browser: TinyFaceDetector + FaceLandmark68Net + FaceExpressionNet | Any detector + 68-point landmark model + 7-class expression model behind the contract in section 4 | `DGX_VISION_URL` |
 
 ### Things that are *not* hosted models
 

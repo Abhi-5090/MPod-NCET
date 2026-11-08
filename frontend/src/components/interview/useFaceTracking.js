@@ -1,34 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { IMAGE_BASE } from "../../api/axiosInstance";
+import { createAttentionTracker } from "./attentionTracker";
 
 const MODEL_BASE = `${IMAGE_BASE}models/`;
-const EMPTY_EMOTIONS = { happy: 0, sad: 0, angry: 0, neutral: 0, surprise: 0, fear: 0, disgust: 0 };
-// face-api.js expression names -> names used in reports (same as the server's).
-const EXPRESSION_NAMES = { fearful: "fear", disgusted: "disgust", surprised: "surprise" };
-const BROWSER_INTERVAL_MS = 400;
+const BROWSER_INTERVAL_MS = 250; // frequent enough to catch most blinks; slow devices skip frames
+// 0.3 keeps turned heads (measured: 0.5 loses most faces turned past ~25 degrees).
+const DETECTOR_SCORE = 0.3;
 const FRAME_WIDTH = 320; // frames sent to the server are downscaled
 const SERVER_FAILURES_BEFORE_FALLBACK = 3;
+const NO_FACE_WARNING_MS = 4000;
 
-const eyeAspectRatio = (eye) => {
-  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  return (d(eye[1], eye[5]) + d(eye[2], eye[4])) / (2 * d(eye[0], eye[3]));
-};
-
-// face-api.js detection -> { points: [{x,y}] x 68, expressions }
+// face-api.js detection -> { points: [{x,y}] x 68, expressions, score, box }
 const fromBrowser = (d) => ({
   points: d.landmarks.positions.map((p) => ({ x: p.x, y: p.y })),
-  expressions: Object.fromEntries(Object.entries(d.expressions).map(([k, v]) => [EXPRESSION_NAMES[k] || k, v])),
+  expressions: d.expressions,
+  score: d.detection.score,
+  box: { width: d.detection.box.width, height: d.detection.box.height },
 });
 
 // DGX vision service face -> same shape
 const fromServer = (f) => ({
   points: Array.isArray(f.landmarks) && f.landmarks.length === 68 ? f.landmarks.map(([x, y]) => ({ x, y })) : null,
   expressions: f.expressions || {},
+  score: f.score,
+  box: f.box,
 });
 
 /**
- * Camera-based attention tracking for the coding interview. Only aggregate counts are
+ * Camera-based attention and expression tracking for every interview type. Only aggregate counts are
  * sent with the submission.
  *
  * The face model (detector, 68 landmarks, 7 expressions) runs either:
@@ -49,12 +49,9 @@ export default function useFaceTracking(enabled = true, { client, config } = {})
   const [status, setStatus] = useState("loading"); // loading | on | denied | unavailable
   const [warning, setWarning] = useState("");
 
-  const counts = useRef({ ...EMPTY_EMOTIONS });
-  const head = useRef({ seen_left: 0, seen_right: 0, seen_center: 1, time_left: 0, time_right: 0, time_center: 0 });
-  const last = useRef({ position: null, time: 0 });
-  const blinks = useRef(0);
-  const eyeClosed = useRef(false);
-  const noFace = useRef(0);
+  const tracker = useRef(null);
+  if (!tracker.current) tracker.current = createAttentionTracker();
+  const noFaceSince = useRef(null);
   const modesUsed = useRef(new Set());
 
   // Read once: the mode only changes from server to browser (fallback), never back.
@@ -70,47 +67,18 @@ export default function useFaceTracking(enabled = true, { client, config } = {})
     streamRef.current = null;
   }, []);
 
-  // Updates the counters from the faces found in one frame.
-  const process = useCallback((faces, intervalMs) => {
-    if (faces.length > 1) {
-      setWarning("More than one person is visible. Only you should be in front of the camera.");
+  // Updates the attention summary and the on-screen warning from one analysed frame.
+  // `at` is when the analysed frame was captured, so slow analysis does not shift time.
+  const process = useCallback((faces, at = Date.now()) => {
+    const now = at;
+    const { warning: w } = tracker.current.update(faces, now);
+    if (w === "none") {
+      if (noFaceSince.current == null) noFaceSince.current = now;
+      if (now - noFaceSince.current >= NO_FACE_WARNING_MS) setWarning("We cannot see your face. Please stay in front of the camera.");
       return;
     }
-    if (faces.length === 0) {
-      noFace.current += 1;
-      // about 4 seconds without a face
-      if (noFace.current * intervalMs >= 4000) setWarning("We cannot see your face. Please stay in front of the camera.");
-      return;
-    }
-    noFace.current = 0;
-    setWarning("");
-    const d = faces[0];
-
-    const total = Object.values(d.expressions).reduce((s, v) => s + (Number(v) || 0), 0) || 1;
-    Object.keys(EMPTY_EMOTIONS).forEach((k) => {
-      if (((Number(d.expressions[k]) || 0) / total) * 100 > 50) counts.current[k] += 1;
-    });
-
-    if (!d.points) return;
-    const p = d.points;
-    const jaw = p.slice(0, 17);
-    const nose = p[27];
-    const width = Math.abs(jaw[16].x - jaw[0].x);
-    const th = width * 0.2;
-    const pos = nose.x < jaw[0].x + th ? "right" : nose.x > jaw[16].x - th ? "left" : "center";
-    const now = Date.now();
-    if (last.current.position) {
-      if (last.current.position !== pos) head.current[`seen_${pos}`] += 1;
-      head.current[`time_${last.current.position}`] += now - last.current.time;
-    }
-    last.current = { position: pos, time: now };
-
-    const ear = (eyeAspectRatio(p.slice(36, 42)) + eyeAspectRatio(p.slice(42, 48))) / 2;
-    if (ear < 0.29) eyeClosed.current = true;
-    else if (eyeClosed.current) {
-      blinks.current += 1;
-      eyeClosed.current = false;
-    }
+    noFaceSince.current = null;
+    setWarning(w === "multiple" ? "More than one person is visible. Only you should be in front of the camera." : "");
   }, []);
 
   useEffect(() => {
@@ -142,16 +110,24 @@ export default function useFaceTracking(enabled = true, { client, config } = {})
       if (cancelled) return;
       modesUsed.current.add("browser");
       let inFlight = false; // a slow detection must not overlap the next one
+      const frame = document.createElement("canvas");
       startLoop(async () => {
         const video = videoRef.current;
-        if (inFlight || !video || video.readyState < 2) return;
+        if (inFlight || !video || video.readyState < 2 || !video.videoWidth) return;
         inFlight = true;
         try {
+          // Freeze one frame: the detector, landmarks and expressions must all see the same
+          // image. On the live video they run at different moments, and a moving head then
+          // gets a face box from one frame and landmarks from a later one.
+          frame.width = video.videoWidth;
+          frame.height = video.videoHeight;
+          frame.getContext("2d").drawImage(video, 0, 0);
+          const capturedAt = Date.now();
           const detections = await faceapi
-            .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+            .detectAllFaces(frame, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: DETECTOR_SCORE }))
             .withFaceLandmarks()
             .withFaceExpressions();
-          process(detections.map(fromBrowser), BROWSER_INTERVAL_MS);
+          if (!cancelled) process(detections.map(fromBrowser), capturedAt);
         } catch (_) {
           // skip this frame
         } finally {
@@ -173,11 +149,12 @@ export default function useFaceTracking(enabled = true, { client, config } = {})
         canvas.height = Math.round((video.videoHeight / video.videoWidth) * FRAME_WIDTH);
         canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
         const image = canvas.toDataURL("image/jpeg", 0.7).replace(/^data:image\/jpeg;base64,/, "");
+        const capturedAt = Date.now();
         inFlight = true;
         try {
           const res = await clientRef.current.faceFrame(image);
           failures = 0;
-          if (!cancelled) process(((res.data && res.data.faces) || []).map(fromServer), serverInterval);
+          if (!cancelled) process(((res.data && res.data.faces) || []).map(fromServer), capturedAt);
         } catch (err) {
           const st = err && err.response && err.response.status;
           const unavailable = st === 503 || (err && err.response && err.response.data && err.response.data.unavailable);
@@ -222,25 +199,13 @@ export default function useFaceTracking(enabled = true, { client, config } = {})
     };
   }, [enabled, stop, process, startMode, serverInterval]);
 
-  // Aggregate shape stored with the interview (matches the existing report).
+  // Aggregate shape stored with the interview; null when no frame was analysed
+  // (e.g. the face model never finished loading).
   const summary = useCallback(() => {
-    const total = Object.values(counts.current).reduce((s, v) => s + v, 0) || 1;
-    const emotions = Object.fromEntries(
-      Object.entries(counts.current).map(([k, v]) => [k, Number(((v / total) * 100).toFixed(2))])
-    );
-    const h = head.current;
+    const sum = tracker.current.summary();
+    if (!sum) return null;
     const used = [...modesUsed.current];
-    return {
-      seen_left: h.seen_left,
-      seen_right: h.seen_right,
-      seen_center: h.seen_center,
-      blinks: blinks.current,
-      time_straight: Math.round(h.time_center / 1000),
-      time_left: Math.round(h.time_left / 1000),
-      time_right: Math.round(h.time_right / 1000),
-      analysis: used.length > 1 ? "mixed" : used[0],
-      emotions,
-    };
+    return { ...sum, analysis: used.length > 1 ? "mixed" : used[0] };
   }, []);
 
   // Stable object so consumers' callbacks/effects are not recreated every render.

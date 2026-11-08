@@ -18,7 +18,7 @@ import {
   attemptedPercentage,
   deleteResultMessage,
   getTodayDateString,
-  studentReportUrl, statusColor, canRetryEvaluation, canDeleteInterview } from "./interviewHelpers";
+  studentReportUrl, statusColor, canRetryEvaluation, canDeleteInterview, cameraCell, cameraText } from "./interviewHelpers";
 
 const joinList = (value) => (Array.isArray(value) ? value.join(", ") : value || "");
 
@@ -160,6 +160,7 @@ const InterviewsList = (props) => {
       ),
     },
     { dataField: "average_accuracy", text: "Total Accuracy", formatter: formatAccuracy },
+    { dataField: "camera", text: "Camera", formatter: (camera) => cameraCell(camera) },
     {
       dataField: "actions",
       text: "Actions",
@@ -218,6 +219,7 @@ const InterviewsList = (props) => {
       "Start Date & Time": item.start_date_time_ist,
       Accuracy: formatAccuracy(item.average_accuracy),
       Status: item.interview_status,
+      Camera: cameraText(item.camera),
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);

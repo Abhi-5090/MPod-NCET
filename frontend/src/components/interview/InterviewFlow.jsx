@@ -258,7 +258,6 @@ function InterviewFlow({ details, startSession, onExit, kiosk }) {
               {details.interview_type === "coding" ? (
                 <>
                   <li>For each problem, first describe your approach, then write your code, then optimise it.</li>
-                  <li>Keep your camera on and stay in front of it; your attention is monitored.</li>
                 </>
               ) : (
                 <>
@@ -266,6 +265,7 @@ function InterviewFlow({ details, startSession, onExit, kiosk }) {
                   <li>You have 60 seconds per question. If your microphone does not work, type your answer instead.</li>
                 </>
               )}
+              <li>Keep your camera on and stay in front of it; your attention and expressions are recorded for your report (no video is saved).</li>
               <li>Your answers are saved as you go. If the page closes, start again from the same place to continue before the time runs out.</li>
               <li>Do not use your mobile phone during the interview.</li>
               <li>Good luck!</li>

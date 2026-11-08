@@ -16,7 +16,7 @@ import {
   attemptedPercentage,
   deleteResultMessage,
   getTodayDateString,
-  studentReportUrl, statusColor, canRetryEvaluation, canDeleteInterview } from "./interviewHelpers";
+  studentReportUrl, statusColor, canRetryEvaluation, canDeleteInterview, cameraCell } from "./interviewHelpers";
 import "./datatables.scss";
 
 const joinList = (value) => (Array.isArray(value) ? value.join(", ") : value || "");
@@ -153,6 +153,7 @@ const CompanyInterviewsList = (props) => {
         </Badge>{row && row.provisional && (<Badge color="warning" className="ms-1" title={row.evaluation_error || "Scored without AI"}>Provisional</Badge>)}</>
       ),
     },
+    { dataField: "camera", text: "Camera", formatter: (camera) => cameraCell(camera) },
     {
       dataField: "actions",
       text: "Actions",
