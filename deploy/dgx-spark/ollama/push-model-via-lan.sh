@@ -41,8 +41,36 @@ while IFS=$'\t' read -r kind digest size; do
       echo "    model file already on the server ($digest)"
     else
       echo "    streaming model file: $((size / 1000000000)) GB ($digest)"
-      curl -fsSL "$REG/blobs/$digest" \
+      # The download resumes from the last byte when the internet connection drops;
+      # the upload to the server (LAN) stays open the whole time.
+      python3 -I - "$REG/blobs/$digest" "$size" <<'PY' \
         | curl -fsS -X POST -T - -H "Content-Type: application/octet-stream" "$SERVER/api/blobs/$digest"
+import sys, time, urllib.request
+url, size = sys.argv[1], int(sys.argv[2])
+out, done, failures, last = sys.stdout.buffer, 0, 0, 0
+while done < size:
+    try:
+        req = urllib.request.Request(url, headers={"Range": f"bytes={done}-"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            if done and r.status != 206:
+                sys.exit("the registry ignored the resume request")
+            while chunk := r.read(1 << 20):
+                out.write(chunk)
+                done += len(chunk)
+                failures = 0
+                if done - last >= 1 << 30:
+                    last = done
+                    print(f"    {done / 1e9:.1f} / {size / 1e9:.1f} GB", file=sys.stderr, flush=True)
+    except BrokenPipeError:
+        sys.exit("the upload to the server was closed")
+    except Exception as e:
+        failures += 1
+        if failures > 20:
+            sys.exit(f"download failed: {e}")
+        print(f"    connection dropped at {done / 1e9:.2f} GB ({e}); resuming", file=sys.stderr, flush=True)
+        time.sleep(min(60, 5 * failures))
+out.flush()
+PY
       curl -fsI "$SERVER/api/blobs/$digest" >/dev/null || { echo "    upload failed verification"; exit 1; }
       echo "    model file verified on the server"
     fi
