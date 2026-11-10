@@ -1,10 +1,11 @@
-# Hosting mPod on Render (API) and Vercel (website + admin portal)
+# Hosting mPod on Render (API) and Vercel (website and admin portal)
 
 ```
  Students, staff
       │ HTTPS
       ▼
- Vercel ── website (/)  ·  admin portal (/admin)
+ Vercel ── project 1: student website (frontend/)
+        └─ project 2: admin portal (Admin/, served at /admin)
       │
       ▼  /backend/... (API, photos, camera models)
  Render ── backend (Node) ──► MongoDB Atlas
@@ -13,7 +14,7 @@
 
 Files in the repository that do the setup:
 - `render.yaml` (backend service);
-- `vercel.json` (website and admin portal built together; `/backend` forwarded to Render).
+- `frontend/vercel.json` and `Admin/vercel.json`: one Vercel project each (set the project's **Root Directory** to `frontend` or `Admin`). Both forward `/backend/...` to Render.
 
 ## 0. Pick a setup
 
@@ -21,8 +22,8 @@ Login uses a strict same-site cookie, so the browser must see the website and th
 
 | | **A. Your own domain (recommended)** | **B. No domain** |
 |---|---|---|
-| Website + admin | `https://mpod.yourcollege.edu` on Vercel | `https://<project>.vercel.app` |
-| API | `https://api.mpod.yourcollege.edu` on Render | Same Vercel address. Vercel forwards `/backend/...` to Render. |
+| Website / admin | `https://mpod.yourcollege.edu` and `https://admin.mpod.yourcollege.edu` on Vercel | `https://<site>.vercel.app` and `https://<admin>.vercel.app` |
+| API | `https://api.mpod.yourcollege.edu` on Render | The same Vercel addresses: each project forwards `/backend/...` to Render. |
 | Limits | None extra | Vercel sits in the middle: requests must start answering within 2 minutes; large uploads (a 50 MB photo zip) and per-student rate limits are untested through it |
 
 Option B is fine for a trial. Use A for real exams.
@@ -47,8 +48,8 @@ Option B is fine for a trial. Use A for real exams.
    | Setting | Value |
    |---|---|
    | `MONGODB_URI` | Your Atlas connection string (the same as in your `backend/.env`) |
-   | `CORS_ORIGINS` | A: `https://mpod.yourcollege.edu` · B: `https://<project>.vercel.app` |
-   | `PUBLIC_BACKEND_URL` | A: `https://api.mpod.yourcollege.edu/backend/` · B: `https://<project>.vercel.app/backend/` |
+   | `CORS_ORIGINS` | Both addresses, comma separated. A: `https://mpod.yourcollege.edu,https://admin.mpod.yourcollege.edu` · B: `https://<site>.vercel.app,https://<admin>.vercel.app` |
+   | `PUBLIC_BACKEND_URL` | A: `https://api.mpod.yourcollege.edu/backend/` · B: `https://<site>.vercel.app/backend/` |
    | `AI_PROVIDER` | `openai` (or `dgx`, once section 5 is done) |
    | `OPENAI_API_KEY` | Your OpenAI key |
    | `DGX_BASE_URL`, `DGX_API_KEY` | Leave empty until section 5 |
@@ -62,21 +63,28 @@ Notes:
 - Keep **one instance**. The scoring queue and rate limits live inside the process.
 - Files uploaded on the old server (profile photos, icons): copy them into `/var/data/uploads/profile-pics`, `/var/data/uploads/technology-icons` and `/var/data/uploads/module-icons` using the service's **Shell** tab.
 
-## 3. Website and admin portal on Vercel
+## 3. Website and admin portal on Vercel (two projects)
 
-1. Vercel → **Add New → Project** → import the same repository.
-   - Leave **Root Directory** as the repository root.
-   - Vercel reads `vercel.json`: it builds both apps into one site, with the website at `/` and the admin portal at `/admin`.
-2. **Option B only:** check that the Render address in `vercel.json` (`https://mpod.onrender.com`) is your service's real address. If not, edit it, then commit and push.
-3. **Option A only:** before the first deploy, add two **Environment Variables** (Production). They are read at build time, so redeploy after changing them.
-   - `VITE_API_URL` = `https://api.mpod.yourcollege.edu/backend/api/`
-   - `VITE_BACKEND_URL` = `https://api.mpod.yourcollege.edu/backend/`
-4. Deploy. **Option A:** Project → **Settings → Domains** → add `mpod.yourcollege.edu` and create the DNS record Vercel shows.
-5. If the address differs from what you put in `CORS_ORIGINS` / `PUBLIC_BACKEND_URL` on Render, correct those on Render; the service restarts automatically.
+Both projects import the same repository; only the **Root Directory** differs. Each folder's `vercel.json` sets the install, build, output and routing, so leave **Build and Output Settings** unchanged and **Framework Preset** on **Other**.
+
+**Project 1: student website**
+1. Vercel → **Add New → Project** → import `Abhi-5090/MPod`.
+2. **Root Directory:** `frontend` → **Deploy**. Address, e.g. `https://<site>.vercel.app`.
+
+**Project 2: admin portal**
+1. Vercel → **Add New → Project** → import `Abhi-5090/MPod` again, with a different project name (e.g. `mpod-admin`).
+2. **Root Directory:** `Admin`.
+3. **Environment Variables:** `VITE_STUDENT_APP_URL` = the student website address **with a `/` at the end**, e.g. `https://<site>.vercel.app/`. The admin portal uses it for report and kiosk-setup links.
+4. **Deploy**. The portal opens at `https://<admin>.vercel.app/admin/` (the bare address redirects there).
+
+**Both projects**
+- Option B: check that the Render address in both `vercel.json` files (`https://mpod.onrender.com`) is your service's real address.
+- Option A: add `VITE_API_URL` = `https://api.mpod.yourcollege.edu/backend/api/` and `VITE_BACKEND_URL` = `https://api.mpod.yourcollege.edu/backend/` to both projects (read at build time: redeploy after changing them), then add each domain under **Settings → Domains**.
+- On Render, `CORS_ORIGINS` must list both addresses (section 2).
 
 ## 4. Check it works
 
-1. Open `https://<site>/admin`, log in as a platform admin. The dashboard loads with data.
+1. Open `https://<admin>.vercel.app/admin/`, log in as a platform admin. The dashboard loads with data.
 2. **Settings → AI Model Usage**: OpenAI shows *Available* after **Test connection**.
 3. Schedule a short technology interview for a test student. Take it at `https://<site>` with the camera on, and submit. The report shows scores and the camera analysis.
 4. Upload a profile photo (Users → Update Profile pics), redeploy the backend, and check the photo is still there (the disk works).
