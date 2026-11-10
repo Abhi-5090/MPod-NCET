@@ -55,7 +55,7 @@ Option B is fine for a trial. Use A for real exams.
    | `EMAIL_USER`, `EMAIL_PASS` | The Gmail account and app password used for password-reset emails |
 
    `JWT_SECRET` is generated automatically. Copy other settings from your `backend/.env` the same way if you changed them (interview timing, OpenAI models).
-3. Deploy. The log should end with `Connected to DB` and `Server started`. Check `https://mpod-backend.onrender.com/backend/api/health` (your service's address may have a suffix).
+3. Deploy. The log should end with `Connected to DB` and `Server started`. Check `https://mpod.onrender.com/backend/api/health`.
 4. **Option A:** service → **Settings → Custom Domains** → add `api.mpod.yourcollege.edu`, and create the CNAME record Render shows at your DNS provider.
 
 Notes:
@@ -67,7 +67,7 @@ Notes:
 1. Vercel → **Add New → Project** → import the same repository.
    - Leave **Root Directory** as the repository root.
    - Vercel reads `vercel.json`: it builds both apps into one site, with the website at `/` and the admin portal at `/admin`.
-2. **Option B only:** check that the Render address in `vercel.json` (`https://mpod-backend.onrender.com`) is your service's real address. If not, edit it, then commit and push.
+2. **Option B only:** check that the Render address in `vercel.json` (`https://mpod.onrender.com`) is your service's real address. If not, edit it, then commit and push.
 3. **Option A only:** before the first deploy, add two **Environment Variables** (Production). They are read at build time, so redeploy after changing them.
    - `VITE_API_URL` = `https://api.mpod.yourcollege.edu/backend/api/`
    - `VITE_BACKEND_URL` = `https://api.mpod.yourcollege.edu/backend/`
