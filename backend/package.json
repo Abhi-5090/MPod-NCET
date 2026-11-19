@@ -11,7 +11,8 @@
     "migrate": "node scripts/migrate.js",
     "test": "jest --runInBand",
     "ai:check": "node scripts/ai-check.js",
-    "ai:calibrate": "node scripts/ai-calibrate.js"
+    "ai:calibrate": "node scripts/ai-calibrate.js",
+    "set-password": "node scripts/set-password.js"
   },
   "author": "",
   "license": "ISC",
