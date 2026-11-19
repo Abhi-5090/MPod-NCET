@@ -120,11 +120,15 @@ const VERBAL_SYSTEM = `You are an expert evaluator of technical interview answer
 - If the answer is mostly correct, give an accuracy between 70 and 90.
 - If the answer is fully correct and well explained, give an accuracy between 90 and 100.
 The answer was captured by speech-to-text, so ignore minor transcription errors.
+When an expected answer is given, judge the candidate's answer against it.
+For short factual questions (a unit, a chemical formula, a maths formula or a calculated value), a correct short answer is fully correct (90-100) without further explanation, and a wrong value is 0.
+Accept spoken forms: "C O 2" for CO2, "H 2 O" for H2O, "a square plus 2 a b plus b square" for a² + 2ab + b², numbers written as words, "watts" for watt.
 Do NOT write a corrected answer; only analyse the given one.
 ${UNTRUSTED_NOTE}
 Respond with JSON: {"accuracy": <integer 0-100>, "analysis": "<why it is correct or incorrect>", "improvements": "<how to improve>"}`;
 
-async function scoreVerbalAnswer(question, answer, time) {
+// reference: the expected answer, for questions from the question bank (never shown to students).
+async function scoreVerbalAnswer(question, answer, time, reference) {
   const base = {
     given_question: question,
     given_answer: answer || "",
@@ -138,7 +142,10 @@ async function scoreVerbalAnswer(question, answer, time) {
 
   const data = await chatJson("scoring", {
     system: VERBAL_SYSTEM,
-    user: `Question: ${JSON.stringify(question)}\n\n${fence("candidate_answer", answer)}`,
+    user:
+      `Question: ${JSON.stringify(question)}\n\n` +
+      (reference && String(reference).trim() ? `Expected answer: ${JSON.stringify(String(reference).slice(0, 2000))}\n\n` : "") +
+      fence("candidate_answer", answer),
     maxTokens: 700,
     temperature: 0.2,
   });
@@ -192,9 +199,9 @@ async function overallAnalysis(results) {
   };
 }
 
-/** Evaluates a technology/company interview. items: [{question, answer, time}] */
+/** Evaluates a technology/company interview. items: [{question, answer, time, reference?}] */
 async function evaluateVerbalInterview(items) {
-  const results = await mapLimit(items, env.llmParallelCalls, (it) => scoreVerbalAnswer(it.question, it.answer, it.time));
+  const results = await mapLimit(items, env.llmParallelCalls, (it) => scoreVerbalAnswer(it.question, it.answer, it.time, it.reference));
   const overall = await overallAnalysis(results);
   return { results, overall };
 }

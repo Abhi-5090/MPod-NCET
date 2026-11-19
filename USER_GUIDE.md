@@ -109,6 +109,20 @@ When a company interview starts, mPod randomly picks the requested number of que
 ### 4.5 Practice question bank (Interview Questions)
 **Questions → Interview Questions → Add**: choose a technology (and optionally companies) and upload an Excel file with the columns `question`, `answer` and optionally `star_status` (1 means "previously asked in interviews").
 
+### 4.5.1 Fixed questions: Physics, Chemistry and Maths
+Some modules have their own fixed question set. A technology interview scheduled with such a module asks those questions (picked at random, up to the number of questions scheduled) instead of AI-generated ones, and scores each answer against its expected answer.
+
+| Technology | Module | Questions |
+|---|---|---|
+| Physics | Units and Measurements | 15 SI units (power, force, energy, pressure…) |
+| Chemistry | Chemical Formulas | 15 formulas (oxygen, carbon dioxide, water…) |
+| Maths | Algebraic Formulas | 7 formulas ((a + b)², area of a circle, simple interest…) |
+| Maths | Equations and Evaluation | 8 calculations (3 × 4 × 7 × 6 × 5, solve 2x + 3 = 11…) |
+
+To schedule one: **Schedule interview → Technology interview**, choose e.g. *Physics*, the module *Units and Measurements*, and up to 15 questions. If you ask for more questions than the module has, the AI adds the rest. Other modules (e.g. Java → OOP) are unchanged and use the AI.
+
+The questions are added by `npm run seed:subjects` (in `backend/`), which is safe to run again; edit `backend/scripts/seed-subjects.js` to change them.
+
 ### 4.6 Which AI is used (Settings → AI Model Usage)
 Choose **DGX Spark** (the self-hosted models on campus) or **OpenAI** for every interview: generating questions, scoring answers, report summaries and coding evaluation. Each card shows the model used for each of these, whether the provider is answering right now, and a **Test connection** button. Select a card, press **Use …** and confirm.
 

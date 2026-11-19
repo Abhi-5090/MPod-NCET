@@ -6,6 +6,13 @@ const LiteInterviewQuestionSchema = mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'technology'
   },
+  // Optional section of the technology. Interviews scheduled with this module are asked
+  // these questions instead of AI-generated ones (e.g. Physics > Units and Measurements).
+  module: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'module',
+    index: true,
+  },
   question:{
     type: String,
   },

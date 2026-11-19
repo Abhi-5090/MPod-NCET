@@ -88,6 +88,7 @@ async function evaluateDoc(type, doc) {
     question: q.question,
     answer: byQid[q.qid]?.answer || "",
     time: byQid[q.qid]?.time ?? null,
+    reference: q.reference,
   }));
   const { results, overall } = await evaluation.evaluateVerbalInterview(items);
   return { question_details: results, overall_analysis: [overall] };

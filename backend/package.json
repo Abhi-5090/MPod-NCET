@@ -12,7 +12,8 @@
     "test": "jest --runInBand",
     "ai:check": "node scripts/ai-check.js",
     "ai:calibrate": "node scripts/ai-calibrate.js",
-    "set-password": "node scripts/set-password.js"
+    "set-password": "node scripts/set-password.js",
+    "seed:subjects": "node scripts/seed-subjects.js"
   },
   "author": "",
   "license": "ISC",

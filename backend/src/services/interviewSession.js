@@ -37,6 +37,26 @@ function attemptMinutes(type, questions, tenant) {
 
 // ------------------------------------------------------------ question issuing
 
+// A question from the bank; its answer is kept as the reference for scoring, never sent to students.
+function bankQuestion(question, answer) {
+  const q = { question: String(question || "").trim(), source: "bank" };
+  if (answer && String(answer).trim()) q.reference = String(answer).slice(0, 5000);
+  return q;
+}
+// Adds questions from `more` that aren't already in `list`, up to `count` in total.
+function merge(list, more, count) {
+  const out = [...list];
+  const seen = new Set(out.map((q) => q.question.trim().toLowerCase()));
+  for (const q of more) {
+    const key = String(q.question || "").trim().toLowerCase();
+    if (!key || seen.has(key) || out.length >= count) continue;
+    seen.add(key);
+    out.push(q);
+  }
+  return out;
+}
+const numbered = (list) => list.map((q, i) => ({ ...q, qid: `q${i + 1}` }));
+
 async function buildQuestions(type, doc) {
   const count = Math.max(1, parseInt(doc.questions_count, 10) || 1);
 
@@ -49,7 +69,22 @@ async function buildQuestions(type, doc) {
       { $lookup: { from: "topics", localField: "_id", foreignField: "module", as: "topics" } },
       { $project: { module_name: 1, topics: { _id: 1, topic_name: 1 } } },
     ]);
-    const moduleTopics = modules
+    // Modules with their own question set (question bank entries linked to the module, e.g.
+    // Physics > Units and Measurements) are asked from that set, never from the AI.
+    const fixedRows = modules.length
+      ? await LiteInterviewQuestion.aggregate([
+          { $match: { technology: new mongoose.Types.ObjectId(String(doc.technology)), module: { $in: modules.map((m) => m._id) }, status: { $ne: 0 } } },
+          { $sample: { size: count } },
+        ])
+      : [];
+    const fixed = fixedRows.map((r) => bankQuestion(r.question, r.answer)).filter((q) => q.question);
+    if (fixed.length >= count) return numbered(fixed.slice(0, count));
+
+    // The rest comes from the AI, over the modules without a question set (or all of them).
+    const withSet = new Set(fixedRows.map((r) => String(r.module)));
+    const aiModules = modules.some((m) => !withSet.has(String(m._id))) ? modules.filter((m) => !withSet.has(String(m._id))) : modules;
+    const need = count - fixed.length;
+    const moduleTopics = aiModules
       .map((m) => {
         const t = m.topics.filter((x) => !topicIds.length || topicIds.includes(String(x._id))).map((x) => x.topic_name);
         return `${m.module_name}: ${t.join(", ")}`;
@@ -59,17 +94,18 @@ async function buildQuestions(type, doc) {
       const list = await evaluation.generateTechnologyQuestions({
         technologyName: tech.technology_name,
         level: doc.level,
-        count,
+        count: need,
         moduleTopics,
       });
-      return list.map((q, i) => ({ qid: `q${i + 1}`, question: q, source: "ai" }));
+      return numbered(merge(fixed, list.map((q) => ({ question: q, source: "ai" })), count));
     } catch (err) {
       // The interview must not be blocked when the AI is unavailable: fall back to
       // the curated question bank, then to questions built from the syllabus topics.
       console.warn(`[interview] AI question generation failed (${aiStatus.classify(err).message}); using fallback questions.`);
-      const fallback = await fallbackTechnologyQuestions({ doc, tech, modules, topicIds, count });
-      if (!fallback.length) throw err;
-      return fallback;
+      const fallback = await fallbackTechnologyQuestions({ doc, tech, modules: aiModules, topicIds, count });
+      const all = merge(fixed, fallback, count);
+      if (!all.length) throw err;
+      return numbered(all);
     }
   }
 
@@ -132,7 +168,14 @@ async function fallbackTechnologyQuestions({ doc, tech, modules, topicIds, count
   };
   // 1. Curated practice bank for this technology.
   const bank = await LiteInterviewQuestion.aggregate([
-    { $match: { technology: new mongoose.Types.ObjectId(String(doc.technology)), status: { $ne: 0 } } },
+    {
+      $match: {
+        technology: new mongoose.Types.ObjectId(String(doc.technology)),
+        status: { $ne: 0 },
+        // General questions, or ones from the interview's own modules (not other sections).
+        $or: [{ module: null }, { module: { $in: (doc.module || []).map((m) => new mongoose.Types.ObjectId(String(m))) } }],
+      },
+    },
     { $sample: { size: count * 2 } },
   ]);
   bank.forEach((b) => add(String(b.question || ""), "bank", b.answer));
