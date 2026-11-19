@@ -46,6 +46,11 @@ app.get(
   serveProfilePic
 );
 
+// Keep-alive target (see services/keepAlive.js): tiny, no database, no rate limit.
+app.get("/backend/api/ping", (req, res) => {
+  res.set("Cache-Control", "no-store").json({ ok: true, time: new Date().toISOString() });
+});
+
 app.use("/backend/api", rl.api);
 app.use("/backend/", require("./routes/userRoutes"));
 app.use("/backend/", require("./routes/sessionRoutes"));

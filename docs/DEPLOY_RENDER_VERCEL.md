@@ -43,6 +43,8 @@ Option B is fine for a trial. Use A for real exams.
    - the **Starter** plan with a 1 GB disk at `/var/data`, which keeps uploaded photos and icons.
 
    The free plan won't do: it sleeps after 15 minutes idle (background scoring stops) and loses uploaded files.
+
+   **Staying awake:** the backend calls its own `/backend/api/ping` every 5 minutes (Render gives it its address in `RENDER_EXTERNAL_URL`), and the GitHub Actions workflow `.github/workflows/keep-alive.yml` calls it every 5 minutes from outside, which also wakes it if it ever slept. This stops the free plan's 15-minute sleep, but uploaded files are still lost on each deploy without a disk. Settings: `KEEP_ALIVE=false` turns it off, `KEEP_ALIVE_MINUTES` changes the interval, `KEEP_ALIVE_URL` overrides the address; the repository variable `BACKEND_URL` changes the workflow's address.
 2. Render asks for the values marked `sync: false`. Fill them in:
 
    | Setting | Value |

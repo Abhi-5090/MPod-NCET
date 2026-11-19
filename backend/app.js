@@ -41,6 +41,8 @@ async function main() {
   evaluationQueue.start();
   await require("./src/services/aiSettings").start(); // AI provider chosen in the admin portal
   require("./src/services/aiStatus").start(); // background AI health check
+  const keepAlive = require("./src/services/keepAlive");
+  keepAlive.start(); // pings our own public address every 5 minutes so the host never sleeps
 
   const server = app.listen(env.port, env.host, () =>
     console.log(`Server started on http://${env.host || "localhost"}:${env.port}/backend`)
@@ -58,6 +60,7 @@ async function main() {
   const shutdown = (signal) => {
     console.log(`${signal} received, shutting down`);
     evaluationQueue.stop();
+    keepAlive.stop();
     server.close(() => mongoose.disconnect().finally(() => process.exit(0)));
     setTimeout(() => process.exit(1), 10000).unref();
   };

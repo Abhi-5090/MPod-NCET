@@ -18,6 +18,7 @@ const PUBLIC = new Set([
   "POST /backend/api/interview-session/submit",
   "GET /backend/api/interview-session/status",
   "GET /backend/api/health",
+  "GET /backend/api/ping", // keep-alive, returns only the time
   "GET /backend/api/server-time",
 ]);
 
